@@ -60,7 +60,7 @@ export function profilesPage(): HTMLElement {
           try {
             const j = JSON.parse(await f.text());
             const q = deserializeProfile(Uint8Array.from(j.profile ?? []));
-            if (!q) throw new Error('not a JamboPad profile');
+            if (!q) throw new Error('not a JAMboPAD profile');
             u.profiles[i] = q;
             await run('import', () => pushAll([i]));
           } catch (e) {

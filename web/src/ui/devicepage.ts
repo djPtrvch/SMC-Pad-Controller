@@ -32,7 +32,7 @@ async function connect(name: string) {
   } catch (e) {
     dev.close();
     if (e instanceof DeviceError && e.message.startsWith('the pad has')) throw e;
-    throw new Error(`${name} does not answer: it probably runs the stock firmware. Install the JamboPad firmware first (FIRST INSTALL below).`);
+    throw new Error(`${name} does not answer: it probably runs the stock firmware. Install the JAMboPAD firmware first (FIRST INSTALL below).`);
   }
 }
 

@@ -1,4 +1,4 @@
-// FIRST INSTALL: the open-smc-pad bootloader over the stock firmware, then the JamboPad firmware over DFU.
+// FIRST INSTALL: the open-smc-pad bootloader over the stock firmware, then the JAMboPAD firmware over DFU.
 import { midiAccess, midiSupported } from '../device';
 import { InstallFiles, SincoLink, installFromStock } from '../sinco';
 import { changed, run } from '../state';
@@ -56,7 +56,7 @@ export function installSection(writeFirmware: () => void): HTMLElement {
   const busy = st.progress > 0 && st.progress < 1;
   return h('div', {},
     h('h3', {}, 'FIRST INSTALL (STOCK FIRMWARE)'),
-    h('p', { class: 'hint' }, 'Once per pad. Replaces the stock firmware with the open-smc-pad bootloader, then writes JamboPad. Pad charged or on USB power, do not unplug it while writing. CHECK reads the pad and writes nothing.'),
+    h('p', { class: 'hint' }, 'Once per pad. Replaces the stock firmware with the open-smc-pad bootloader, then writes JAMboPAD. Pad charged or on USB power, do not unplug it while writing. CHECK reads the pad and writes nothing.'),
     st.step === 1
       ? h('div', { class: 'row' },
         h('button', { class: 'primary', onclick: () => { st.step = 2; writeFirmware(); } }, 'PAD RESTARTED: WRITE FIRMWARE'))

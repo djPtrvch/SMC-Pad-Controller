@@ -20,7 +20,7 @@ function header(): HTMLElement {
   const status = app.units.slice().reverse().map((u) => `${u.side ? 'L' : 'R'}: ${u.dev ? `P${u.editing + 1} “${u.profiles[u.editing].name}”` : 'offline'}`).join(' · ');
   const unsaved = anyUnsaved();
   return h('header', {},
-    h('div', { class: 'brand' }, 'JAMBOPAD'),
+    h('div', { class: 'brand' }, 'JAMboPAD'),
     h('div', { class: 'status' }, status),
     app.units.some((u) => u.dev) ? h('button', {
       class: unsaved ? 'primary' : '',

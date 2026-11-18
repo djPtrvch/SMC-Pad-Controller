@@ -1,4 +1,4 @@
-# JamboPad SysEx protocol (format version 2)
+# JAMboPAD SysEx protocol (format version 2)
 
 Every message: `F0 7D 4A 50 <cmd> <data…> F7` (0x7D — non-commercial ID, `4A 50` — "JP"). All data bytes are 7-bit.
 A reply is the command `| 0x40`, its first data byte is the status: 0 OK, 1 bad arguments, 2 storage error.
@@ -93,4 +93,4 @@ Physical numbering (open-smc-pad, matches the photo of the unit): knobs on the l
 
 ## MIDI OUT (3.5 mm)
 
-PC5, written by software at 31 250 baud (the core sets up no UART for it). THRU: CLOCK — F8, FA, FB, FC from USB; ALL — every message from USB except JamboPad SysEx (active sensing FE dropped). Controls to MIDI OUT: the controls' own messages too.
+PC5, written by software at 31 250 baud (the core sets up no UART for it). THRU: CLOCK — F8, FA, FB, FC from USB; ALL — every message from USB except JAMboPAD SysEx (active sensing FE dropped). Controls to MIDI OUT: the controls' own messages too.

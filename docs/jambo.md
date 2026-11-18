@@ -1,4 +1,4 @@
-# JamboPad и JAMbo
+# JAMboPAD и JAMbo
 
 Как пэды работают с JAMbo (нативная Swift-версия, CoreMIDI; в Safari Web MIDI нет).
 

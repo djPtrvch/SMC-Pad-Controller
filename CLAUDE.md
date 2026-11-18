@@ -1,4 +1,4 @@
-# SMC-Pad Controller для JAMbo
+# JAMboPAD — контроллер для JAMbo (SMC-Pad Controller)
 
 Контроллер для приложения JAMbo (iPad, нативная Swift-версия) из двух M-Vave SMC-PAD, поставленных зеркально, со своей прошивкой и веб-конфигуратором.
 

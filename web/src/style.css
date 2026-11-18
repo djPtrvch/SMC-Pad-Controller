@@ -11,7 +11,7 @@ html, body { overflow-x: hidden; margin: 0; background: var(--bg); color: var(--
 #app { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; }
 
 header { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 14px 0 10px; position: sticky; top: 0; background: var(--bg); z-index: 2; }
-.brand { font-weight: 800; letter-spacing: .12em; }
+.brand { font-size: 18px; font-weight: 800; letter-spacing: .06em; }
 .status { flex: 1; color: var(--dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
 nav button { padding: 0 4px; font-size: 13px; letter-spacing: .02em; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
