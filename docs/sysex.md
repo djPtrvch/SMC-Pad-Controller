@@ -34,6 +34,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 | 63 | PROFILE | p — selected on the device (PAD BANK + KNOB BANK held, then a pad of the top row) |
 | 64 | LAYER | layer — changed on the device (a button with ACTION → LAYER) |
 | 66 | BLUETOOTH | 0/1 — switched on the device (ACTION BLUETOOTH) or by SET_BLUETOOTH |
+| 67 | SCALE | scale index 0–10, mask bits 0–6, mask bits 7–11 — picked on the device (a button with ACTION → SCALE held, then a pad) |
 | 65 | ROOT | key note 0–11 — picked on the device (a button with ACTION → KEY NOTE held, then a pad) |
 
 ## Packing
@@ -67,7 +68,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 
 Control (8 bytes): type (0 OFF, 1 NOTE, 2 CC, 3 PC, 4 ACTION — buttons only; knobs — OFF or CC), channel 0–15, number, mode, a, b, c, d.
 - pad: mode 0 MOMENTARY / 1 TOGGLE; a idle colour, b pressed colour, c host colour (palette 0–15).
-- button: mode 0 MOMENTARY / 1 TOGGLE; ACTION: number 0 LAYER (a = layer), 1 OCTAVE UP, 2 OCTAVE DOWN (KEYS), 4 BLUETOOTH (on / off; lit while on), 5 PROFILE (a = profile, a bank of settings), 3 KEY NOTE (held: the three lower rows of pads are C … B as the unit sits, from the bottom-left; a tap picks the key note, event 65).
+- button: mode 0 MOMENTARY / 1 TOGGLE; ACTION: number 0 LAYER (a = layer), 1 OCTAVE UP, 2 OCTAVE DOWN (KEYS), 4 BLUETOOTH (on / off; lit while on), 5 PROFILE (a = profile, a bank of settings), 6 SCALE (held: the 11 lowest pads, from the bottom-left as the unit sits, are the scales in the list order below; a tap picks one, event 67), 3 KEY NOTE (held: the three lower rows of pads are C … B as the unit sits, from the bottom-left; a tap picks the key note, event 65).
 - knob: mode 0 ABSOLUTE, 1 RELATIVE OFFSET 64, 2 RELATIVE 2'S COMPLEMENT, 3 RELATIVE SIGNED BIT; a min, b max (a > b — inverted), c speed (steps per detent, 1–16).
 
 Palette: 0 off, 1 white, 2 red, 3 orange-red, 4 orange, 5 yellow, 6 lime, 7 green, 8 mint, 9 cyan, 10 sky, 11 blue, 12 indigo, 13 violet, 14 magenta, 15 pink. A host note/CC with value v lights the pad in its host colour at brightness v/127.

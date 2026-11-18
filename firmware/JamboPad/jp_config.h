@@ -7,7 +7,7 @@
 
 namespace jp {
 
-static const uint8_t FW_MAJOR = 0, FW_MINOR = 4, FW_PATCH = 0;
+static const uint8_t FW_MAJOR = 0, FW_MINOR = 5, FW_PATCH = 0;
 static const uint8_t FORMAT_VERSION = 2;
 
 static const int PADS = 16, BUTTONS = 10, KNOBS = 8, LAYERS = 4;
@@ -25,8 +25,9 @@ enum Side : uint8_t { SIDE_RIGHT = 0, SIDE_LEFT = 1 };      // LEFT = the unit t
 
 enum MsgType : uint8_t { MSG_OFF = 0, MSG_NOTE = 1, MSG_CC = 2, MSG_PC = 3, MSG_ACTION = 4 };   // ACTION: buttons only
 // number = action, a = layer. ROOT: while held, the 12 lowest pads pick the key note (C..B)
-// BLUETOOTH: Bluetooth on / off. PROFILE: a = profile (bank) 0..3
-enum Action : uint8_t { ACT_LAYER = 0, ACT_OCT_UP = 1, ACT_OCT_DOWN = 2, ACT_ROOT = 3, ACT_BLUETOOTH = 4, ACT_PROFILE = 5, ACT_COUNT };
+// BLUETOOTH: Bluetooth on / off. PROFILE: a = profile (bank) 0..3.
+// SCALE: while held, the 11 lowest pads pick the scale (JAMbo's list, from the bottom-left)
+enum Action : uint8_t { ACT_LAYER = 0, ACT_OCT_UP = 1, ACT_OCT_DOWN = 2, ACT_ROOT = 3, ACT_BLUETOOTH = 4, ACT_PROFILE = 5, ACT_SCALE = 6, ACT_COUNT };
 enum ButtonMode : uint8_t { MODE_MOMENTARY = 0, MODE_TOGGLE = 1 };
 enum KnobMode : uint8_t { KNOB_ABS = 0, KNOB_REL64 = 1, KNOB_REL2C = 2, KNOB_RELSIGN = 3 };
 enum Curve : uint8_t {

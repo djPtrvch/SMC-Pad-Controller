@@ -50,7 +50,7 @@ export class SimDevice implements Link {
     const ok = (extra: number[] = []) => this.out(m.cmd | REPLY, [0, ...extra]);
     const bad = () => this.out(m.cmd | REPLY, [1]);
     switch (m.cmd) {
-      case CMD.HELLO: ok([0, 4, 0, FORMAT_VERSION, this.side, this.active, PROFILES, this.thru, this.controlsOut, this.layer, this.ble]); break;
+      case CMD.HELLO: ok([0, 5, 0, FORMAT_VERSION, this.side, this.active, PROFILES, this.thru, this.controlsOut, this.layer, this.ble]); break;
       case CMD.GET_PROFILE:
         if (d[0] >= PROFILES) return bad();
         ok([d[0], ...pack7(serializeProfile(this.profiles[d[0]]))]);

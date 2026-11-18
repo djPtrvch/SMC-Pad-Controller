@@ -179,6 +179,17 @@ void Engine::padOn(int pad, uint8_t vel) {
         if (slot >= 0) selectProfile(slot);
         return;
     }
+    if (scalePick >= 0) {
+        menuPad[pad] = true;                        // no MIDI for this press
+        int k = rootSlot(pad);
+        if (k >= 0 && k < SCALE_COUNT) {
+            keyMask = SCALE_MASKS[k];
+            ledDirty = true;
+            uint8_t ev[3] = {(uint8_t)k, (uint8_t)(keyMask & 0x7F), (uint8_t)(keyMask >> 7)};
+            sendSysex(EV_SCALE, ev, 3);             // the app can follow (docs/jambo.md)
+        }
+        return;
+    }
     if (rootPick >= 0) {
         menuPad[pad] = true;                        // no MIDI for this press
         int k = rootSlot(pad);
@@ -249,9 +260,10 @@ void Engine::buttonEvent(int button, bool down, uint32_t nowMs) {
     }
     const Control &x = prof[dev.active].ctl[CTL_BUTTON0 + button];
     if (x.type == MSG_ACTION) {
-        if (x.number == ACT_ROOT) {
-            if (down) rootPick = button;
-            else if (rootPick == button) rootPick = -1;
+        if (x.number == ACT_ROOT || x.number == ACT_SCALE) {
+            int &pick = x.number == ACT_ROOT ? rootPick : scalePick;
+            if (down) pick = button;
+            else if (pick == button) pick = -1;
             ledDirty = true;
         } else if (down) {
             buttonAction(x);
@@ -613,6 +625,12 @@ uint32_t Engine::padColor(int pad) {
         int slot = menuSlot(pad);
         return slot < 0 ? 0 : paletteRgb(slot == dev.active ? 1 : 11, slot == dev.active ? 127 : 24);
     }
+    if (scalePick >= 0) {
+        int k = rootSlot(pad);
+        if (k < 0 || k >= SCALE_COUNT) return 0;
+        if (pressed) return paletteRgb(1, 127);
+        return SCALE_MASKS[k] == keyMask ? paletteRgb(5, 127) : paletteRgb(9, 24);
+    }
     if (rootPick >= 0) {
         int k = rootSlot(pad);
         if (k < 0) return 0;
@@ -654,7 +672,7 @@ void Engine::updateLeds() {
                 case ACT_LAYER: on = x.a == curLayer; break;
                 case ACT_PROFILE: on = x.a == dev.active; break;
                 case ACT_BLUETOOTH: on = dev.ble; break;
-                default: on = btnDown[b]; break;    // ROOT, OCTAVE: while held
+                default: on = btnDown[b]; break;    // ROOT, SCALE, OCTAVE: while held
             }
         }
         else if (p.ledMode == LED_HOST) on = hostVal[ctl] > 0;

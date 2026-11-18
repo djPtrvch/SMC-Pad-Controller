@@ -45,7 +45,7 @@ export function controlName(u: Unit, ctl: number): string {
 
 function shortMsg(p: Profile, ctl: number): string {
   const x = p.ctl[ctl];
-  if (x.type === MSG_ACTION) return [`LAYER ${x.a + 1}`, 'OCTAVE +', 'OCTAVE −', 'KEY NOTE', 'BLUETOOTH', `PROFILE ${x.a + 1}`][x.number] ?? '?';
+  if (x.type === MSG_ACTION) return [`LAYER ${x.a + 1}`, 'OCTAVE +', 'OCTAVE −', 'KEY NOTE', 'BLUETOOTH', `PROFILE ${x.a + 1}`, 'SCALE'][x.number] ?? '?';
   if (x.type === 0) return '—';
   return `${['', 'N', 'CC', 'PC'][x.type]} ${x.number}`;
 }
@@ -179,6 +179,7 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
     kids.push(field('ACTION', select(ACTIONS, x.number, (v) => edit(() => { x.number = v; }))));
     if (x.number === 0) kids.push(field('LAYER', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'switches the pads to this layer'));
     if (x.number === 3) kids.push(h('p', { class: 'hint' }, 'Hold the button: the three lower rows of pads are C … B, the key note is lit; tap a pad to pick it. The pad tells the app.'));
+    if (x.number === 6) kids.push(h('p', { class: 'hint' }, 'Hold the button: the 11 lowest pads are the scales (Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harm Minor, Pent Major, Pent Minor, Chromatic — from the bottom-left), the current one is lit; tap a pad to pick it. The pad tells the app.'));
     if (x.number === 4) kids.push(h('p', { class: 'hint' }, 'Switches Bluetooth on and off; the button is lit while it is on.'));
     if (x.number === 5) kids.push(field('PROFILE', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'a bank of settings: layout, sensitivity, layers'));
   } else if (x.type) {

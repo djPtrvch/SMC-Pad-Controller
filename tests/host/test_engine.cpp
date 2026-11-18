@@ -495,6 +495,37 @@ static void testPortsDoNotMix() {
     CHECK(hal.din.size() == 1);
 }
 
+static void testScalePick() {
+    MockHal hal;
+    sideLeft(hal);
+    Engine e(hal);
+    e.begin(0);
+    Profile p = e.activeProfile();
+    int sb = buttonAt(SIDE_LEFT, 5), rb = buttonAt(SIDE_LEFT, 4);
+    p.ctl[CTL_BUTTON0 + sb] = Control{MSG_ACTION, 0, ACT_SCALE, 0, 0, 0, 0, 0};
+    p.ctl[CTL_BUTTON0 + rb] = Control{MSG_ACTION, 0, ACT_ROOT, 0, 0, 0, 0, 0};
+    uint8_t raw[PROFILE_BYTES], packed[1000];
+    serializeProfile(p, raw);
+    size_t n = pack7(raw, PROFILE_BYTES, packed);
+    std::vector<uint8_t> pl = {0};
+    pl.insert(pl.end(), packed, packed + n);
+    feed(e, sysex(CMD_SET_PROFILE, pl));
+    e.buttonEvent(sb, true, 0);
+    CHECK(e.pickingScale() && !e.pickingRoot());
+    e.tick(0);
+    CHECK(hal.rgb[padAt(SIDE_LEFT, 3, 0)] == paletteRgb(5, 127));      // Major (scale 0): current
+    CHECK(hal.rgb[padAt(SIDE_LEFT, 1, 3)] == 0);                       // slot 11: no scale
+    hal.out.clear();
+    uint32_t t = 0;
+    int minor = padAt(SIDE_LEFT, 3, 1);                                // slot 1: Minor
+    for (int k = 0; k < 5; k++) { e.padSample(minor, 900, t); t += 3; }
+    e.padSample(minor, 0, t);
+    CHECK(e.scaleMask() == SCALE_MASKS[1]);
+    CHECK(hal.out.size() == 1 && hal.out[0][4] == EV_SCALE && hal.out[0][5] == 1);
+    e.buttonEvent(sb, false, 0);
+    CHECK(!e.pickingScale());
+}
+
 static void testFollowHostOff() {
     MockHal hal;
     sideLeft(hal);
@@ -606,6 +637,7 @@ int main(int argc, char **argv) {
     testRootPick();
     testBluetoothAndProfileButtons();
     testPortsDoNotMix();
+    testScalePick();
     testThru();
     if (argc > 1) writeVectors(argv[1]);
     std::printf(failures ? "%d FAILED\n" : "all tests passed\n", failures);

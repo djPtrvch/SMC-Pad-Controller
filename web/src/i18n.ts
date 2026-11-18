@@ -67,10 +67,12 @@ const RU: Record<string, string> = {
   ABSOLUTE: 'АБСОЛЮТНЫЙ', 'REL OFFSET 64': 'ОТНОС. OFFSET 64', "REL 2'S COMPL.": 'ОТНОС. 2’S COMPL.', 'REL SIGNED BIT': 'ОТНОС. SIGNED BIT',
   'IDLE COLOR': 'ЦВЕТ В ПОКОЕ', 'PRESSED COLOR': 'ЦВЕТ ПРИ НАЖАТИИ', 'HOST COLOR': 'ЦВЕТ ОТ ПРИЛОЖЕНИЯ', 'when the app lights it': 'когда его зажигает приложение',
   'APPLY TO LAYER': 'НА ВЕСЬ СЛОЙ', 'NUMBER PADS FROM HERE': 'НУМЕРОВАТЬ ОТСЮДА',
-  LAYER: 'СЛОЙ', 'OCTAVE UP': 'ОКТАВА ВВЕРХ', 'OCTAVE DOWN': 'ОКТАВА ВНИЗ', 'KEY NOTE (HOLD)': 'ТОНИКА (УДЕРЖАНИЕ)', 'PROFILE (BANK)': 'ПРОФИЛЬ (БАНК)', PROFILE: 'ПРОФИЛЬ',
+  LAYER: 'СЛОЙ', 'OCTAVE UP': 'ОКТАВА ВВЕРХ', 'OCTAVE DOWN': 'ОКТАВА ВНИЗ', 'KEY NOTE (HOLD)': 'ТОНИКА (УДЕРЖАНИЕ)', 'PROFILE (BANK)': 'ПРОФИЛЬ (БАНК)', 'SCALE (HOLD)': 'ГАММА (УДЕРЖАНИЕ)', PROFILE: 'ПРОФИЛЬ',
   'switches the pads to this layer': 'переключает пэды на этот слой',
   'Hold the button: the three lower rows of pads are C … B, the key note is lit; tap a pad to pick it. The pad tells the app.':
     'Держите кнопку: три нижних ряда пэдов — C … B, тоника подсвечена; тап по пэду выбирает её. Пэд сообщает её приложению.',
+  'Hold the button: the 11 lowest pads are the scales (Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harm Minor, Pent Major, Pent Minor, Chromatic — from the bottom-left), the current one is lit; tap a pad to pick it. The pad tells the app.':
+    'Держите кнопку: 11 нижних пэдов — гаммы (мажор, минор, дорийская, фригийская, лидийская, миксолидийская, локрийская, гармонический минор, пентатоника мажор, пентатоника минор, хроматическая — от левого нижнего), текущая подсвечена; тап по пэду выбирает её. Пэд сообщает её приложению.',
   'Switches Bluetooth on and off; the button is lit while it is on.': 'Включает и выключает Bluetooth; кнопка горит, пока он включён.',
   'a bank of settings: layout, sensitivity, layers': 'банк настроек: раскладка, чувствительность, слои',
   TYPE: 'ТИП', CUSTOM: 'СВОЙ', KEYS: 'КЛАВИШИ', 'layer 1 is always there': 'слой 1 есть всегда',
