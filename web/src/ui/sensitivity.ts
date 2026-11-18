@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // SENSITIVITY: velocity curve, thresholds, aftertouch, per-pad gain with live pressure.
 import { DeviceEvent } from '../device';
 import { AT_MODES, CURVES, CURVE_CUSTOM, CURVE_FIXED, PADS, padAt, velocityLut } from '../protocol';
@@ -46,8 +47,8 @@ function curveCanvas(): HTMLCanvasElement {
     }
     g.globalAlpha = 1;
     g.fillStyle = dim; g.font = '22px system-ui';
-    g.fillText('hit strength →', pad, 600 - 8);
-    g.save(); g.translate(26, pad + size); g.rotate(-Math.PI / 2); g.fillText('velocity →', 0, 0); g.restore();
+    g.fillText(t('hit strength →'), pad, 600 - 8);
+    g.save(); g.translate(26, pad + size); g.rotate(-Math.PI / 2); g.fillText(t('velocity →'), 0, 0); g.restore();
     const lut = velocityLut(p.sens);
     g.strokeStyle = fg; g.lineWidth = 4;
     g.beginPath();

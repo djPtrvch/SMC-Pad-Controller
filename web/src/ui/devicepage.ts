@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // DEVICE: connect the pads (Web MIDI) or virtual ones, each unit's side and MIDI OUT, firmware.
 import { Device, DeviceError, bluetoothLink, bluetoothSupported, midiLink, midiPorts, midiSupported, usbSupported } from '../device';
 import { DfuDevice } from '../dfu';
@@ -89,7 +90,7 @@ function unitCard(u: Unit): HTMLElement {
       if (u.sim) u.sim.side = v as Side;
       swapSides(u);
       const moved = app.units[v as Side];
-      if (confirm('Load the JAMbo layout for this side into all 4 profiles of this unit? (Its profiles are replaced.)')) {
+      if (confirm(t('Load the JAMbo layout for this side into all 4 profiles of this unit? (Its profiles are replaced.)'))) {
         await moved.dev!.factoryReset();
         for (let i = 0; i < PROFILES; i++) moved.profiles[i] = await moved.dev!.getProfile(i);
         moved.hello!.active = 0;
@@ -99,7 +100,7 @@ function unitCard(u: Unit): HTMLElement {
       }
     })), 'LEFT: turned by 180°, to the left of the other unit'),
     toggle('BLUETOOTH', !!hello.ble, (v) => {
-      if (!v && u.dev!.link.name.startsWith('JAMboPAD') && !confirm('This connection is Bluetooth: switching it off disconnects. Go on?')) return;
+      if (!v && u.dev!.link.name.startsWith('JAMboPAD') && !confirm(t('This connection is Bluetooth: switching it off disconnects. Go on?'))) return;
       run('bluetooth', async () => {
         await u.dev!.setBluetooth(v);
         hello.ble = v ? 1 : 0;

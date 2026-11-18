@@ -8,7 +8,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 
 | cmd | name | data | reply data |
 |---|---|---|---|
-| 01 | HELLO | — | status, fw major, minor, patch, format version, side, active profile, profile count, MIDI OUT thru, controls to MIDI OUT, layer |
+| 01 | HELLO | — | status, fw major, minor, patch, format version, side, active profile, profile count, MIDI OUT thru, controls to MIDI OUT, layer, Bluetooth on |
 | 02 | GET_PROFILE | p | status, p, profile (packed, 850 bytes) |
 | 03 | SET_PROFILE | p, profile (packed) | status, p — applied at once if p is active; kept in RAM until SAVE |
 | 04 | SAVE | — | status — writes the device settings and changed profiles to flash |
@@ -22,6 +22,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 | 0C | SET_SCALE | root 0–11, mask bits 0–6, mask bits 7–11, octave 0–7 (127 keep) | none — from the app; used by KEYS layers when the profile follows the app |
 | 0D | SET_MIDI_OUT | thru (0 OFF, 1 CLOCK, 2 ALL), controls 0/1 | status — saved at once |
 | 0E | SET_LAYER | layer 0–3 | status — the pads show this layer (not OFF layers) |
+| 0F | SET_BLUETOOTH | 0/1 | status (sent before switching: off drops a Bluetooth connection) — saved |
 
 ## Events (device → host)
 
@@ -32,6 +33,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 | 62 | IDENTIFY | kind (0 pad, 1 button, 2 knob), physical index, value (velocity / 127 down, 0 up / 64 + delta) |
 | 63 | PROFILE | p — selected on the device (PAD BANK + KNOB BANK held, then a pad of the top row) |
 | 64 | LAYER | layer — changed on the device (a button with ACTION → LAYER) |
+| 66 | BLUETOOTH | 0/1 — switched on the device (ACTION BLUETOOTH) or by SET_BLUETOOTH |
 | 65 | ROOT | key note 0–11 — picked on the device (a button with ACTION → KEY NOTE held, then a pad) |
 
 ## Packing
@@ -65,7 +67,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 
 Control (8 bytes): type (0 OFF, 1 NOTE, 2 CC, 3 PC, 4 ACTION — buttons only; knobs — OFF or CC), channel 0–15, number, mode, a, b, c, d.
 - pad: mode 0 MOMENTARY / 1 TOGGLE; a idle colour, b pressed colour, c host colour (palette 0–15).
-- button: mode 0 MOMENTARY / 1 TOGGLE; ACTION: number 0 LAYER (a = layer), 1 OCTAVE UP, 2 OCTAVE DOWN (KEYS), 3 KEY NOTE (held: the three lower rows of pads are C … B as the unit sits, from the bottom-left; a tap picks the key note, event 65).
+- button: mode 0 MOMENTARY / 1 TOGGLE; ACTION: number 0 LAYER (a = layer), 1 OCTAVE UP, 2 OCTAVE DOWN (KEYS), 4 BLUETOOTH (on / off; lit while on), 5 PROFILE (a = profile, a bank of settings), 3 KEY NOTE (held: the three lower rows of pads are C … B as the unit sits, from the bottom-left; a tap picks the key note, event 65).
 - knob: mode 0 ABSOLUTE, 1 RELATIVE OFFSET 64, 2 RELATIVE 2'S COMPLEMENT, 3 RELATIVE SIGNED BIT; a min, b max (a > b — inverted), c speed (steps per detent, 1–16).
 
 Palette: 0 off, 1 white, 2 red, 3 orange-red, 4 orange, 5 yellow, 6 lime, 7 green, 8 mint, 9 cyan, 10 sky, 11 blue, 12 indigo, 13 violet, 14 magenta, 15 pink. A host note/CC with value v lights the pad in its host colour at brightness v/127.
@@ -83,9 +85,9 @@ Linear velocity x = (peak · gain/100 − on) · 127 / (full − on), clamped 1.
 LINEAR u, SOFT √u, HARD u², EXP (e^{3u} − 1)/(e^3 − 1), LOG ln(1 + 9u)/ln 10, S-CURVE 3u² − 2u³, CUSTOM — linear between the 5 points (÷127), FIXED — the fixed velocity.
 Aftertouch: (raw · gain/100 − threshold) · 127 / (full − threshold), 0..127.
 
-## Device settings (store key 30, 5 bytes)
+## Device settings (store key 30, 6 bytes)
 
-format version, side, active profile, MIDI OUT thru, controls to MIDI OUT. Profiles — store keys 31–34.
+format version, side, active profile, MIDI OUT thru, controls to MIDI OUT, Bluetooth on (1 by default). Profiles — store keys 31–34.
 
 ## Geometry
 
@@ -94,3 +96,12 @@ Physical numbering (open-smc-pad, matches the photo of the unit): knobs on the l
 ## MIDI OUT (3.5 mm)
 
 PC5, written by software at 31 250 baud (the core sets up no UART for it). THRU: CLOCK — F8, FA, FB, FC from USB; ALL — every message from USB except JAMboPAD SysEx (active sensing FE dropped). Controls to MIDI OUT: the controls' own messages too.
+
+## Bluetooth
+
+Named JAMboPAD L / JAMboPAD R (by side). BLE-MIDI (standard service 03B80E5A-…; open-smc-pad's library: no SysEx) and a settings service for the configurator (Web Bluetooth):
+
+- service 4a50c0f1-0b1e-4d1a-9a7d-7d4a50000001, characteristic 4a50c0f1-0b1e-4d1a-9a7d-7d4a50000002 (write, write without response, notify);
+- the same SysEx as over USB, as plain bytes in pieces of up to 20 bytes both ways (fits any ATT MTU).
+
+Firmware is written over USB only (the bootloader is USB DFU).

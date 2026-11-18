@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // FIRST INSTALL: the open-smc-pad bootloader over the stock firmware, then the JAMboPAD firmware over DFU.
 import { midiAccess, midiSupported } from '../device';
 import { InstallFiles, SincoLink, installFromStock } from '../sinco';
@@ -65,7 +66,7 @@ export function installSection(writeFirmware: () => void): HTMLElement {
         h('button', {
           disabled: !midiSupported() || busy,
           onclick: () => {
-            if (!confirm('Install the bootloader over the stock firmware? Going back to the stock firmware later needs extra hardware (a Raspberry Pi Pico).')) return;
+            if (!confirm(t('Install the bootloader over the stock firmware? Going back to the stock firmware later needs extra hardware (a Raspberry Pi Pico).'))) return;
             run('install', () => go(false));
           },
         }, 'INSTALL')),

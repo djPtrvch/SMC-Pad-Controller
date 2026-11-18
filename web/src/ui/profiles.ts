@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 // PROFILES: four sets of settings on the device; pick, rename, copy, reset, export, import.
 import { NAME_LEN, PROFILES, cloneProfile, defaultProfile, deserializeProfile, serializeProfile } from '../protocol';
 import { changed, profileEdited, report, run, unit } from '../state';
@@ -47,7 +48,7 @@ export function profilesPage(): HTMLElement {
       }, h('option', { value: -1 }, 'COPY TO…'), ...Array.from({ length: PROFILES }, (_, k) => k).filter((k) => k !== i).map((k) => h('option', { value: k }, `PROFILE ${k + 1}`))),
       h('button', {
         onclick: () => {
-          if (!confirm(`Reset profile ${i + 1} to the JAMbo layout?`)) return;
+          if (!confirm(t(`Reset profile ${i + 1} to the JAMbo layout?`))) return;
           u.profiles[i] = defaultProfile(u.side);
           run('reset', () => pushAll([i]));
         },

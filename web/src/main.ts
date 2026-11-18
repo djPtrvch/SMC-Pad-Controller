@@ -1,6 +1,7 @@
 // JamboPad configurator: tabs, header with SAVE, status line.
 import { Tab, anyUnsaved, app, changed, onChange, run } from './state';
-import { fitText, h } from './ui/dom';
+import { fitText, h, segmented } from './ui/dom';
+import { lang, setLang, translateTree } from './i18n';
 import { devicePage } from './ui/devicepage';
 import { layoutPage } from './ui/layout';
 import { profilesPage } from './ui/profiles';
@@ -21,6 +22,7 @@ function header(): HTMLElement {
   const unsaved = anyUnsaved();
   return h('header', {},
     h('div', { class: 'brand' }, 'JAMboPAD'),
+    h('div', { class: 'lang' }, segmented(['EN', 'RU'], lang === 'ru' ? 1 : 0, (v) => { setLang(v ? 'ru' : 'en'); changed(); })),
     h('div', { class: 'status' }, status),
     app.units.some((u) => u.dev) ? h('button', {
       class: unsaved ? 'primary' : '',
@@ -47,6 +49,7 @@ function render() {
       page,
     ].filter((x): x is HTMLElement => x !== null),
   );
+  translateTree(root);
   fitText(root);
   window.scrollTo(0, scroll);
 }
@@ -73,4 +76,5 @@ window.addEventListener('beforeunload', (e) => {
   if (anyUnsaved()) e.preventDefault();
 });
 
+setLang(lang);
 render();
