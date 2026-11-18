@@ -67,6 +67,11 @@ jobs:
           ls osp/tools/jl-toolchain
       - name: Build the bootloader and the installer (fw/boot)
         run: |
+          # open-smc-pad v0.1.1: fw/smcpad/usb/dcd_br25.c includes smcpad_spin.h, which fw/boot/build.sh
+          # does not reach (it is in fw/smcpad/include and pulls the application's app_config.h). The
+          # bootloader runs on the uboot's clock, for which the waits were tuned before that header
+          # existed: scale 1, as before.
+          printf '#pragma once\n#define SMCPAD_SPIN(n) (n)\n' > osp/fw/boot/include/smcpad_spin.h
           docker build -t jl-build -f osp/docker/Dockerfile.jl-build osp/docker
           osp/fw/boot/build.sh
       - name: Package
