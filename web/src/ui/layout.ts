@@ -1,7 +1,7 @@
 // LAYOUT: both units as they sit side by side (the left one turned by 180°), pad layers,
 // and the editors of a control, a layer and the KEYS scale.
 import {
-  ACTIONS, BUTTONS, BUTTON_MODES, BUTTON_NAMES, CTL_BUTTON0, CTL_KNOB0, KEYS_LAYOUTS, KNOB_MODES, LAYERS, LAYER_KEYS, LAYER_OFF,
+  ACTIONS, BUTTONS, BUTTON_COLORS, BUTTON_MODES, BUTTON_NAMES, CTL_BUTTON0, CTL_KNOB0, KEYS_LAYOUTS, KNOB_MODES, LAYERS, LAYER_KEYS, LAYER_OFF,
   LAYER_TYPES, LED_MODES, MSG_ACTION, MSG_TYPES, NOTE_NAMES, PADS, PALETTE_NAMES, Profile, SCALES, Side, cssColor, isButton, isKnob,
   isPad, keysNote, knobPosition, noteName, padAt, padPosition, paletteRgb,
 } from '../protocol';
@@ -36,7 +36,7 @@ export function controlName(u: Unit, ctl: number): string {
   const unitName = u.side === Side.LEFT ? 'LEFT' : 'RIGHT';
   if (isPad(ctl)) {
     const [row, col] = padPosition(u.side, ctl % PADS);
-    return `${unitName} · LAYER ${Math.floor(ctl / PADS) + 1} · PAD row ${row + 1}, column ${col + 1}`;
+    return `${unitName} · BANK ${Math.floor(ctl / PADS) + 1} · PAD row ${row + 1}, column ${col + 1}`;
   }
   if (isButton(ctl)) return `${unitName} · BUTTON ${BUTTON_NAMES[ctl - CTL_BUTTON0]}`;
   const [row, col] = knobPosition(u.side, ctl - CTL_KNOB0);
@@ -45,7 +45,7 @@ export function controlName(u: Unit, ctl: number): string {
 
 function shortMsg(p: Profile, ctl: number): string {
   const x = p.ctl[ctl];
-  if (x.type === MSG_ACTION) return [`LAYER ${x.a + 1}`, 'OCTAVE +', 'OCTAVE −', 'KEY NOTE', 'BLUETOOTH', `PROFILE ${x.a + 1}`, 'SCALE'][x.number] ?? '?';
+  if (x.type === MSG_ACTION) return [`BANK ${x.a + 1}`, 'OCTAVE +', 'OCTAVE −', 'KEY NOTE', 'BLUETOOTH', `PROFILE ${x.a + 1}`, 'SCALE'][x.number] ?? '?';
   if (x.type === 0) return '—';
   return `${['', 'N', 'CC', 'PC'][x.type]} ${x.number}`;
 }
@@ -177,7 +177,7 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
   ];
   if (x.type === MSG_ACTION) {
     kids.push(field('ACTION', select(ACTIONS, x.number, (v) => edit(() => { x.number = v; }))));
-    if (x.number === 0) kids.push(field('LAYER', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'switches the pads to this layer'));
+    if (x.number === 0) kids.push(field('BANK', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'switches the pads to this bank'));
     if (x.number === 3) kids.push(h('p', { class: 'hint' }, 'Hold the button: the three lower rows of pads are C … B, the key note is lit; tap a pad to pick it. The pad tells the app.'));
     if (x.number === 6) kids.push(h('p', { class: 'hint' }, 'Hold the button: the 11 lowest pads are the scales (Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harm Minor, Pent Major, Pent Minor, Chromatic — from the bottom-left), the current one is lit; tap a pad to pick it. The pad tells the app.'));
     if (x.number === 4) kids.push(h('p', { class: 'hint' }, 'Switches Bluetooth on and off; the button is lit while it is on.'));
@@ -205,7 +205,11 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
         onclick: () => edit(() => {
           for (let q = 0; q < PADS; q++) Object.assign(p.ctl[L * PADS + q], { type: x.type, channel: x.channel, mode: x.mode, a: x.a, b: x.b, c: x.c });
         }),
-      }, 'APPLY TO LAYER'),
+      }, 'APPLY TO BANK'),
+      h('button', {
+        disabled: !bankButtons(p, L).length,
+        onclick: () => edit(() => colorAsButton(p, L)),
+      }, 'COLOR AS ITS BUTTON'),
       h('button', {
         onclick: () => edit(() => {
           // numbers upwards from this pad's: bottom row first, left to right, as the unit sits
@@ -218,18 +222,40 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
   return h('div', { class: 'editor' }, h('div', { class: 'title' }, controlName(u, ctl)), ...kids);
 }
 
+// the physical buttons that open bank L (ACTION → PAD BANK)
+function bankButtons(p: Profile, L: number): number[] {
+  return p.ctl.slice(CTL_BUTTON0, CTL_KNOB0).map((x, b) => (x.type === MSG_ACTION && x.number === 0 && x.a === L ? b : -1)).filter((b) => b >= 0);
+}
+
+// the bank takes the colour of the button that opens it: KEYS — key note full, scale notes dim,
+// notes outside the scale dark; CUSTOM — pads dim at rest, full when pressed and when the app lights them
+function colorAsButton(p: Profile, L: number) {
+  const b = bankButtons(p, L)[0];
+  if (b === undefined) return;
+  const c = BUTTON_COLORS[b];
+  const l = p.layer[L];
+  if (l.type === LAYER_KEYS) {
+    l.rootColor = c; l.scaleColor = c; l.outColor = 0; l.pressedColor = 1;
+  } else {
+    for (let q = 0; q < PADS; q++) Object.assign(p.ctl[L * PADS + q], { a: c, b: c, c });
+  }
+}
+
 function layerEditor(u: Unit): HTMLElement {
   const p = profileOf(u);
   const L = u.layer;
   const l = p.layer[L];
   const edit = (fn: () => void) => { fn(); profileEdited(u); };
-  const pickers = p.ctl.slice(CTL_BUTTON0, CTL_KNOB0).map((x, b) => (x.type === MSG_ACTION && x.number === 0 && x.a === L ? BUTTON_NAMES[b] : '')).filter(Boolean);
+  const pickers = bankButtons(p, L).map((b) => BUTTON_NAMES[b]);
   const kids: (Node | null)[] = [
     field('TYPE', segmented(LAYER_TYPES, l.type, (v) => edit(() => {
       if (L === 0 && v === LAYER_OFF) return;   // layer 1 always exists
       l.type = v;
-    })), L === 0 ? 'layer 1 is always there' : pickers.length ? `picked by ${pickers.join(', ')}` : 'set a button to ACTION → LAYER to pick it'),
-    toggle('START LAYER', p.startLayer === L, (v) => edit(() => { if (v) p.startLayer = L; }), 'the pads show it after power-up and profile change'),
+    })), pickers.length ? `picked by ${pickers.join(', ')}` : L === 0 ? 'bank 1 is always there' : 'set a button to ACTION → PAD BANK to pick it'),
+    h('div', { class: 'row' },
+      h('button', { disabled: !pickers.length, onclick: () => edit(() => colorAsButton(p, L)) }, 'COLOR AS ITS BUTTON'),
+      h('span', { class: 'hint' }, pickers.length ? 'the bank takes the colour of the button that opens it' : 'no button opens this bank yet')),
+    toggle('START BANK', p.startLayer === L, (v) => edit(() => { if (v) p.startLayer = L; }), 'the pads show it after power-up and profile change'),
   ];
   if (l.type === LAYER_KEYS) {
     const k = p.keys;
@@ -250,7 +276,7 @@ function layerEditor(u: Unit): HTMLElement {
       u.dev ? h('button', { onclick: () => u.dev!.setScale(k.root, SCALES[k.scale].mask, k.octave) }, 'SEND THIS SCALE TO THE PAD') : null,
     );
   }
-  return h('div', { class: 'editor' }, h('div', { class: 'title' }, `${u.side === Side.LEFT ? 'LEFT' : 'RIGHT'} · LAYER ${L + 1}`), ...kids);
+  return h('div', { class: 'editor' }, h('div', { class: 'title' }, `${u.side === Side.LEFT ? 'LEFT' : 'RIGHT'} · BANK ${L + 1}`), ...kids);
 }
 
 function layerTabs(u: Unit): HTMLElement {
@@ -268,7 +294,8 @@ function layerTabs(u: Unit): HTMLElement {
           if (u.dev && t !== LAYER_OFF) u.dev.setLayer(L).catch(() => undefined);
           changed();
         },
-      }, `LAYER ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`);
+      }, h('span', {}, `BANK ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`),
+        h('span', { class: 'tab-sub' }, bankButtons(p, L).map((b) => BUTTON_NAMES[b]).join(', ') || (t === LAYER_OFF ? 'off' : '—')));
     }));
 }
 
@@ -307,7 +334,8 @@ export function layoutPage(): HTMLElement {
     simRow,
     sel && selUnit && !showLayer ? controlEditor(selUnit, sel.ctl) : null,
     layerEditor(edited),
-    field(`LED MODE · ${cur.side === Side.LEFT ? 'LEFT' : 'RIGHT'}`, segmented(LED_MODES, profileOf(cur).ledMode, (v) => { profileOf(cur).ledMode = v; profileEdited(cur); })),
+    field(`PAD LIGHTS · ${cur.side === Side.LEFT ? 'LEFT' : 'RIGHT'}`, segmented(LED_MODES, profileOf(cur).ledMode, (v) => { profileOf(cur).ledMode = v; profileEdited(cur); })),
+    h('p', { class: 'hint' }, 'Who lights the pads and buttons. LOCAL: the pad itself — a pad lights while pressed. HOST: only the app (JAMbo shows the steps, mutes, the selected track). BOTH: the app, and a pressed pad flashes too. Banks with KEYS always light the scale themselves.'),
   ];
   // units side by side (wide landscape): the editors below both; stacked (phone): right under the unit edited
   const sideBySide = units.length > 1 && matchMedia(WIDE).matches;

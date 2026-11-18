@@ -13,9 +13,9 @@ export const DEVICE_BYTES = 6;
 export const enum Side { RIGHT = 0, LEFT = 1 }
 export const MSG_TYPES = ['OFF', 'NOTE', 'CC', 'PC'] as const;
 export const MSG_ACTION = 4;
-export const ACTIONS = ['LAYER', 'OCTAVE UP', 'OCTAVE DOWN', 'KEY NOTE (HOLD)', 'BLUETOOTH', 'PROFILE (BANK)', 'SCALE (HOLD)'] as const;
+export const ACTIONS = ['PAD BANK', 'OCTAVE UP', 'OCTAVE DOWN', 'KEY NOTE (HOLD)', 'BLUETOOTH', 'PROFILE (ALL SETTINGS)', 'SCALE (HOLD)'] as const;
 export const ACT_LAYER = 0, ACT_ROOT = 3, ACT_BLUETOOTH = 4, ACT_PROFILE = 5;
-export const LAYER_TYPES = ['OFF', 'CUSTOM', 'KEYS'] as const;
+export const LAYER_TYPES = ['OFF', 'CUSTOM', 'KEYS'] as const;   // a layer is a pad bank in the interface
 export const LAYER_OFF = 0, LAYER_CUSTOM = 1, LAYER_KEYS = 2;
 export const KEYS_LAYOUTS = ['CHROMATIC', 'IN KEY'] as const;
 export const THRU_MODES = ['OFF', 'CLOCK', 'ALL'] as const;
@@ -33,6 +33,8 @@ export const CURVES = ['LINEAR', 'SOFT', 'HARD', 'EXP', 'LOG', 'S-CURVE', 'FIXED
 export const CURVE_FIXED = 6, CURVE_CUSTOM = 7;
 export const AT_MODES = ['OFF', 'CHANNEL', 'POLY'] as const;
 export const LED_MODES = ['LOCAL', 'HOST', 'BOTH'] as const;
+// the colour each button's LED is made in (palette index), panel order
+export const BUTTON_COLORS = [11, 4, 4, 1, 1, 7, 2, 2, 1, 1];
 export const BUTTON_NAMES = ['BLUETOOTH', 'PAD BANK', 'KNOB BANK', 'LEFT', 'RIGHT', 'PLAY', 'PAUSE', 'REC', 'SHIFT', 'NOTE REPEAT'];
 
 export const PALETTE = [

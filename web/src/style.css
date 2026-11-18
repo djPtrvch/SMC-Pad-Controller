@@ -87,7 +87,8 @@ svg .on-pad.ink-dark { fill: #000; }
 .unit-name { width: 64px; flex: none; font-size: 13px; font-weight: 800; letter-spacing: .08em; display: flex; flex-direction: column; }
 .unit-name .hint { font-size: 11px; font-weight: 400; letter-spacing: 0; }
 .unit-card.cur .unit-name { color: var(--accent); }
-.layer-tabs button { flex: 1; min-width: 0; padding: 0 4px; font-size: 13px; }
+.layer-tabs button { flex: 1; min-width: 0; padding: 2px 4px; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.layer-tabs .tab-sub { font-size: 9px; font-weight: 600; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .layer-tabs button.off { opacity: .5; }
 .unit-switch { margin-bottom: 4px; }
 input[type=checkbox] { width: 28px; height: 28px; min-height: 0; accent-color: var(--accent); }
