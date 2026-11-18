@@ -181,7 +181,8 @@ void sanitize(Profile &p) {
             if (x.mode > MODE_TOGGLE) x.mode = MODE_MOMENTARY;
             if (x.type == MSG_ACTION) {
                 if (x.number >= ACT_COUNT) x.number = ACT_LAYER;
-                x.a = x.a < LAYERS ? x.a : 0;               // LAYERS == PROFILES == 4
+                int most = x.number == ACT_PROFILE ? PROFILES : LAYERS;
+                x.a = x.a < most ? x.a : 0;
             } else {
                 x.a = 0;
             }
@@ -302,19 +303,18 @@ void defaultProfile(Profile &p, Side side) {
     s.atIntervalMs = 10;
     for (int k = 0; k < PADS; k++) s.padGain[k] = 100;
 
+    // every bank OFF to begin with (pads OFF), then the ones the side uses
+    for (int L = 0; L < LAYERS; L++) {
+        p.layer[L] = Layer{LAYER_OFF, 0, KEYS_CHROMATIC, 4, 5, 1, 0, 7};
+        for (int pad = 0; pad < PADS; pad++) p.ctl[L * PADS + pad] = Control{MSG_OFF, 0, 0, 0, 0, 1, 5, 0};
+    }
     if (side == SIDE_LEFT) {
         customLayer(p, side, 0, 1, 0, 5);                           // SEQ: steps, yellow from the app
         p.layer[1] = Layer{LAYER_KEYS, 3, KEYS_CHROMATIC, 4, 5, 1, 0, 7};   // KEYS: root yellow, scale white
         customLayer(p, side, 2, 4, 0, 2);                           // MUTE: red from the app
         customLayer(p, side, 3, 5, 0, 1);                           // TRACK: white from the app
-        // layer 1's pad controls are unused (KEYS); keep them OFF
-        for (int pad = 0; pad < PADS; pad++) p.ctl[PADS + pad] = Control{MSG_OFF, 0, 0, 0, 0, 1, 5, 0};
     } else {
         customLayer(p, side, 0, 2, 0, 5);
-        for (int L = 1; L < LAYERS; L++) {
-            p.layer[L] = Layer{LAYER_OFF, 0, KEYS_CHROMATIC, 4, 5, 1, 0, 7};
-            for (int pad = 0; pad < PADS; pad++) p.ctl[L * PADS + pad] = Control{MSG_OFF, 0, 0, 0, 0, 1, 5, 0};
-        }
     }
     uint8_t ch = side == SIDE_LEFT ? 1 : 2;
     for (int b = 0; b < BUTTONS; b++) {

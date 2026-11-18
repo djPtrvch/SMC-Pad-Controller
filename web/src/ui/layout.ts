@@ -1,7 +1,7 @@
 // LAYOUT: both units as they sit side by side (the left one turned by 180°), pad layers,
 // and the editors of a control, a layer and the KEYS scale.
 import {
-  ACTIONS, BUTTONS, BUTTON_COLORS, BUTTON_MODES, BUTTON_NAMES, CTL_BUTTON0, CTL_KNOB0, KEYS_LAYOUTS, KNOB_MODES, LAYERS, LAYER_KEYS, LAYER_OFF,
+  ACTIONS, BUTTONS, BUTTON_COLORS, BUTTON_MODES, BUTTON_NAMES, CTL_BUTTON0, CTL_KNOB0, KEYS_LAYOUTS, KNOB_MODES, LAYERS, LAYER_CUSTOM, LAYER_KEYS, LAYER_OFF,
   LAYER_TYPES, LED_MODES, MSG_ACTION, MSG_TYPES, NOTE_NAMES, PADS, PALETTE_NAMES, Profile, SCALES, Side, cssColor, isButton, isKnob,
   isPad, keysNote, knobPosition, noteName, padAt, padPosition, paletteRgb,
 } from '../protocol';
@@ -146,9 +146,12 @@ function unitCard(u: Unit): HTMLElement {
   drawUnit(svg, u, 0, (uu, ctl) => {
     app.selected = { side: uu.side, ctl };
     app.cur = uu.side;
+    // a button that opens a bank: the drawing shows that bank
+    const x = profileOf(uu).ctl[ctl];
+    if (isButton(ctl) && x.type === MSG_ACTION && x.number === 0) showBank(uu, x.a);
     changed();
   });
-  return h('div', { class: 'unit-card' + (app.cur === u.side ? ' cur' : '') }, layerTabs(u), svg);
+  return h('div', { class: 'unit-card' + (app.cur === u.side ? ' cur' : '') }, bankLine(u), svg);
 }
 
 // the 16 colours a pad can show, as swatches (0 = off)
@@ -172,12 +175,16 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
   const kids: (Node | null)[] = [
     field('MESSAGE', segmented(types, typeIndex, (v) => edit(() => {
       x.type = knob ? (v ? 2 : 0) : v;
-      if (x.type === MSG_ACTION) { x.number = 0; x.a = 0; }
+      if (x.type === MSG_ACTION) { x.number = 0; x.a = freeBank(p); prepareBank(p, x.a, u.side, profileOf(app.units[1 - u.side])); showBank(u, x.a); }
     }))),
   ];
   if (x.type === MSG_ACTION) {
-    kids.push(field('ACTION', select(ACTIONS, x.number, (v) => edit(() => { x.number = v; }))));
-    if (x.number === 0) kids.push(field('BANK', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'switches the pads to this bank'));
+    kids.push(field('ACTION', select(ACTIONS, x.number, (v) => edit(() => {
+      x.number = v;
+      x.a = v === 0 ? freeBank(p) : 0;
+      if (v === 0) { prepareBank(p, x.a, u.side, profileOf(app.units[1 - u.side])); showBank(u, x.a); }
+    }))));
+    if (x.number === 0) kids.push(field('BANK', select(Array.from({ length: LAYERS }, (_, i) => String(i + 1)), x.a, (v) => edit(() => { x.a = v; prepareBank(p, v, u.side, profileOf(app.units[1 - u.side])); showBank(u, v); })), 'the pads switch to this bank; its pads are set up below'));
     if (x.number === 3) kids.push(h('p', { class: 'hint' }, 'Hold the button: the three lower rows of pads are C … B, the key note is lit; tap a pad to pick it. The pad tells the app.'));
     if (x.number === 6) kids.push(h('p', { class: 'hint' }, 'Hold the button: the 11 lowest pads are the scales (Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harm Minor, Pent Major, Pent Minor, Chromatic — from the bottom-left), the current one is lit; tap a pad to pick it. The pad tells the app.'));
     if (x.number === 4) kids.push(h('p', { class: 'hint' }, 'Switches Bluetooth on and off; the button is lit while it is on.'));
@@ -220,6 +227,37 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
     ));
   }
   return h('div', { class: 'editor' }, h('div', { class: 'title' }, controlName(u, ctl)), ...kids);
+}
+
+// the first bank no button opens yet (an OFF one if possible)
+function freeBank(p: Profile): number {
+  const used = new Set(p.ctl.slice(CTL_BUTTON0, CTL_KNOB0).filter((x) => x.type === MSG_ACTION && x.number === 0).map((x) => x.a));
+  for (let L = 0; L < LAYERS; L++) if (!used.has(L) && p.layer[L].type === LAYER_OFF) return L;
+  for (let L = 0; L < LAYERS; L++) if (!used.has(L)) return L;
+  return 0;
+}
+
+// a bank that was off becomes a CUSTOM bank of notes 36..51 on the first free channel
+function prepareBank(p: Profile, L: number, side: Side, other?: Profile) {
+  const l = p.layer[L];
+  if (l.type !== LAYER_OFF) return;
+  l.type = LAYER_CUSTOM;
+  // a channel neither unit uses yet (JAMbo may listen to both pads on one input)
+  const usedCh = new Set<number>();
+  for (const pr of other ? [p, other] : [p]) {
+    for (let c = CTL_BUTTON0; c < pr.ctl.length; c++) if (pr.ctl[c].type && pr.ctl[c].type !== MSG_ACTION) usedCh.add(pr.ctl[c].channel);
+    for (let k = 0; k < LAYERS; k++) {
+      if ((pr === p && k === L) || pr.layer[k].type === LAYER_OFF) continue;
+      if (pr.layer[k].type === LAYER_KEYS) usedCh.add(pr.layer[k].channel);
+      else for (let q = 0; q < PADS; q++) if (pr.ctl[k * PADS + q].type) usedCh.add(pr.ctl[k * PADS + q].channel);
+    }
+  }
+  let ch = 0;
+  while (ch < 15 && usedCh.has(ch)) ch++;
+  let n = 36;                                 // notes 36..51 from the bottom-left as the unit sits
+  for (let row = 3; row >= 0; row--) for (let col = 0; col < 4; col++) {
+    Object.assign(p.ctl[L * PADS + padAt(side, row, col)], { type: 1, channel: ch, number: n++, mode: 0, a: 0, b: 1, c: 5 });
+  }
 }
 
 // the physical buttons that open bank L (ACTION → PAD BANK)
@@ -279,24 +317,21 @@ function layerEditor(u: Unit): HTMLElement {
   return h('div', { class: 'editor' }, h('div', { class: 'title' }, `${u.side === Side.LEFT ? 'LEFT' : 'RIGHT'} · BANK ${L + 1}`), ...kids);
 }
 
-function layerTabs(u: Unit): HTMLElement {
+function showBank(u: Unit, L: number) {
+  u.layer = L;
+  if (u.dev && profileOf(u).layer[L].type !== LAYER_OFF) u.dev.setLayer(L).catch(() => undefined);
+}
+
+// which bank the drawing shows and the button that opens it (tap a bank button to show its bank)
+function bankLine(u: Unit): HTMLElement {
   const p = profileOf(u);
-  return h('div', { class: 'layer-tabs' },
+  const L = u.layer;
+  const t = p.layer[L].type;
+  const by = bankButtons(p, L).map((b) => BUTTON_NAMES[b]).join(', ');
+  return h('div', { class: 'bank-line' },
     h('span', { class: 'unit-name' }, u.side === Side.LEFT ? 'LEFT' : 'RIGHT', u.dev ? null : h('span', { class: 'hint' }, 'offline')),
-    ...Array.from({ length: LAYERS }, (_, L) => {
-      const t = p.layer[L].type;
-      return h('button', {
-        class: (u.layer === L ? 'on' : '') + (t === LAYER_OFF ? ' off' : ''),
-        onclick: () => {
-          u.layer = L;
-          app.cur = u.side;
-          if (app.selected && app.selected.side === u.side && isPad(app.selected.ctl)) app.selected = null;
-          if (u.dev && t !== LAYER_OFF) u.dev.setLayer(L).catch(() => undefined);
-          changed();
-        },
-      }, h('span', {}, `BANK ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`),
-        h('span', { class: 'tab-sub' }, bankButtons(p, L).map((b) => BUTTON_NAMES[b]).join(', ') || (t === LAYER_OFF ? 'off' : '—')));
-    }));
+    h('span', { class: 'bank-now' }, `BANK ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`),
+    h('span', { class: 'hint' }, by ? `button ${by}` : L === p.startLayer ? 'start bank' : 'no button'));
 }
 
 export function layoutPage(): HTMLElement {
@@ -319,7 +354,7 @@ export function layoutPage(): HTMLElement {
   );
   const help = app.units.some((u) => u.identify)
     ? h('p', { class: 'hint' }, 'IDENTIFY: touch a control on a pad — it lights up here. Check that the drawing matches the device.')
-    : h('p', { class: 'hint' }, 'Tap a control to edit it. Changes go to the pads at once; SAVE writes them to their memory.');
+    : h('p', { class: 'hint' }, 'Tap a control to edit it; tap a button that opens a bank to see and set up that bank. Changes go to the pads at once; SAVE writes them to their memory.');
 
   const sim = selUnit?.sim;
   const simRow = sim && sel ? h('div', { class: 'row' },

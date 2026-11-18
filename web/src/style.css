@@ -14,7 +14,7 @@ header { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 1
 .brand { font-size: 18px; font-weight: 800; letter-spacing: .06em; }
 .status { flex: 1; color: var(--dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
-nav button { padding: 0 4px; font-size: 13px; letter-spacing: .02em; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+nav button { padding: 0 4px; font-size: 13px; letter-spacing: 0; min-width: 0; overflow: hidden; }
 
 button, select, input { font: inherit; color: var(--fg); background: var(--panel2); border: 1px solid transparent; border-radius: 8px; min-height: 44px; padding: 0 14px; }
 button { font-weight: 700; letter-spacing: .04em; cursor: pointer; }
@@ -84,7 +84,7 @@ svg .on-pad.ink-dark { fill: #000; }
 @media (min-width: 900px) and (orientation: landscape) { .units.two { grid-template-columns: 1fr 1fr; } }
 .unit-card { display: flex; flex-direction: column; gap: 8px; }
 .layer-tabs { display: flex; gap: 4px; align-items: center; }
-.unit-name { width: 64px; flex: none; font-size: 13px; font-weight: 800; letter-spacing: .08em; display: flex; flex-direction: column; }
+.unit-name { flex: none; font-size: 13px; font-weight: 800; letter-spacing: .08em; display: flex; flex-direction: column; }
 .unit-name .hint { font-size: 11px; font-weight: 400; letter-spacing: 0; }
 .unit-card.cur .unit-name { color: var(--accent); }
 .layer-tabs button { flex: 1; min-width: 0; padding: 2px 4px; font-size: 13px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
@@ -112,3 +112,6 @@ svg .small { font-size: 11px; }
 .swatch.on { border-color: var(--fg); box-shadow: 0 0 0 2px var(--bg) inset; }
 .editor .field:has(.swatches) { grid-column: 1 / -1; }
 .lang .seg button { min-height: 32px; min-width: 40px; font-size: 12px; padding: 0 6px; }
+.bank-line .unit-name { flex-direction: row; gap: 6px; align-items: baseline; }
+.bank-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bank-now { font-size: 13px; font-weight: 800; letter-spacing: .06em; color: var(--accent); }

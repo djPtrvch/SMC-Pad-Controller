@@ -1,4 +1,4 @@
-# JAMboPAD SysEx protocol (format version 2)
+# JAMboPAD SysEx protocol (format version 3)
 
 Every message: `F0 7D 4A 50 <cmd> <data…> F7` (0x7D — non-commercial ID, `4A 50` — "JP"). All data bytes are 7-bit.
 A reply is the command `| 0x40`, its first data byte is the status: 0 OK, 1 bad arguments, 2 storage error.
@@ -9,7 +9,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 | cmd | name | data | reply data |
 |---|---|---|---|
 | 01 | HELLO | — | status, fw major, minor, patch, format version, side, active profile, profile count, MIDI OUT thru, controls to MIDI OUT, layer, Bluetooth on |
-| 02 | GET_PROFILE | p | status, p, profile (packed, 850 bytes) |
+| 02 | GET_PROFILE | p | status, p, profile (packed, 1782 bytes) |
 | 03 | SET_PROFILE | p, profile (packed) | status, p — applied at once if p is active; kept in RAM until SAVE |
 | 04 | SAVE | — | status — writes the device settings and changed profiles to flash |
 | 05 | SELECT | p | status, p — saved at once |
@@ -21,7 +21,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 | 0B | IDENTIFY | 0/1 | status — while on, controls send event 62 instead of MIDI |
 | 0C | SET_SCALE | root 0–11, mask bits 0–6, mask bits 7–11, octave 0–7 (127 keep) | none — from the app; used by KEYS layers when the profile follows the app |
 | 0D | SET_MIDI_OUT | thru (0 OFF, 1 CLOCK, 2 ALL), controls 0/1 | status — saved at once |
-| 0E | SET_LAYER | layer 0–3 | status — the pads show this layer (not OFF layers) |
+| 0E | SET_LAYER | bank 0–9 | status — the pads show this layer (not OFF layers) |
 | 0F | SET_BLUETOOTH | 0/1 | status (sent before switching: off drops a Bluetooth connection) — saved |
 
 ## Events (device → host)
@@ -39,13 +39,13 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 
 ## Packing
 
-8-bit data is sent as groups of up to 7 bytes: first a byte with the high bits (bit k = byte k's bit 7), then the 7 bytes' low 7 bits. 743 bytes → 850.
+8-bit data is sent as groups of up to 7 bytes: first a byte with the high bits (bit k = byte k's bit 7), then the 7 bytes' low 7 bits. 1559 bytes → 1782.
 
-## Profile (743 bytes)
+## Profile (1559 bytes)
 
 | offset | size | field |
 |---|---|---|
-| 0 | 1 | format version (2) |
+| 0 | 1 | format version (3) |
 | 1 | 12 | name, ASCII, 0-padded |
 | 13 | 2 | on threshold (LE, raw 0..1023, 150) |
 | 15 | 2 | off threshold (80) |
@@ -60,15 +60,15 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 | 30 | 2 | aftertouch threshold (raw, 300) |
 | 32 | 1 | aftertouch interval, ms (10) |
 | 33 | 16 | pad gain, % 50..200 (100), physical pad order |
-| 49 | 4 × 8 | layers: type (0 OFF, 1 CUSTOM, 2 KEYS), channel, layout (0 CHROMATIC, 1 IN KEY), row step, root colour, scale colour, out-of-scale colour, pressed colour |
-| 81 | 82 × 8 | controls: layer L's pads at L·16 + pad (physical), buttons 64–73, knobs 74–81 |
-| 737 | 1 | LED mode: 0 LOCAL, 1 HOST, 2 BOTH |
-| 738 | 1 | start layer |
-| 739 | 4 | KEYS: root 0–11, scale (index, list below), octave 0–7, follow the app 0/1 |
+| 49 | 10 × 8 | pad banks ("layers"): type (0 OFF, 1 CUSTOM, 2 KEYS), channel, layout (0 CHROMATIC, 1 IN KEY), row step, root colour, scale colour, out-of-scale colour, pressed colour |
+| 129 | 178 × 8 | controls: bank L's pads at L·16 + pad (physical), buttons 160–169, knobs 170–177 |
+| 1553 | 1 | LED mode: 0 LOCAL, 1 HOST, 2 BOTH |
+| 1554 | 1 | start bank |
+| 1555 | 4 | KEYS: root 0–11, scale (index, list below), octave 0–7, follow the app 0/1 |
 
 Control (8 bytes): type (0 OFF, 1 NOTE, 2 CC, 3 PC, 4 ACTION — buttons only; knobs — OFF or CC), channel 0–15, number, mode, a, b, c, d.
 - pad: mode 0 MOMENTARY / 1 TOGGLE; a idle colour, b pressed colour, c host colour (palette 0–15).
-- button: mode 0 MOMENTARY / 1 TOGGLE; ACTION: number 0 LAYER (a = layer), 1 OCTAVE UP, 2 OCTAVE DOWN (KEYS), 4 BLUETOOTH (on / off; lit while on), 5 PROFILE (a = profile, a bank of settings), 6 SCALE (held: the 11 lowest pads, from the bottom-left as the unit sits, are the scales in the list order below; a tap picks one, event 67), 3 KEY NOTE (held: the three lower rows of pads are C … B as the unit sits, from the bottom-left; a tap picks the key note, event 65).
+- button: mode 0 MOMENTARY / 1 TOGGLE; ACTION: number 0 PAD BANK (a = bank 0–9), 1 OCTAVE UP, 2 OCTAVE DOWN (KEYS), 4 BLUETOOTH (on / off; lit while on), 5 PROFILE (a = profile 0–3, all the settings), 6 SCALE (held: the 11 lowest pads, from the bottom-left as the unit sits, are the scales in the list order below; a tap picks one, event 67), 3 KEY NOTE (held: the three lower rows of pads are C … B as the unit sits, from the bottom-left; a tap picks the key note, event 65).
 - knob: mode 0 ABSOLUTE, 1 RELATIVE OFFSET 64, 2 RELATIVE 2'S COMPLEMENT, 3 RELATIVE SIGNED BIT; a min, b max (a > b — inverted), c speed (steps per detent, 1–16).
 
 Palette: 0 off, 1 white, 2 red, 3 orange-red, 4 orange, 5 yellow, 6 lime, 7 green, 8 mint, 9 cyan, 10 sky, 11 blue, 12 indigo, 13 violet, 14 magenta, 15 pink. A host note/CC with value v lights the pad in its host colour at brightness v/127.

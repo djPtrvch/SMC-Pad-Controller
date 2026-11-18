@@ -32,7 +32,7 @@ enum Command : uint8_t {
 enum Status : uint8_t { ST_OK = 0, ST_BAD_ARGS = 1, ST_STORE_ERROR = 2 };
 
 static const int STORE_DEVICE = 30;     // + profile index + 1 for the profiles (format 2)
-static const int SYSEX_MAX = 1024;
+static const int SYSEX_MAX = 2048;
 
 class Engine {
 public:

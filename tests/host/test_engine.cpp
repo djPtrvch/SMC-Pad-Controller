@@ -185,7 +185,7 @@ static void testKnobs() {
     Profile p = e.activeProfile();
     p.ctl[CTL_KNOB0 + k].mode = KNOB_REL64;
     p.ctl[CTL_KNOB0 + k].c = 2;
-    uint8_t raw[PROFILE_BYTES], packed[1000];
+    uint8_t raw[PROFILE_BYTES], packed[2000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};
@@ -245,7 +245,7 @@ static void testSysex() {
     uint8_t raw[PROFILE_BYTES + 8];
     unpack7(packed.data(), packed.size(), raw);
     raw[1] = 'X';                                                   // rename
-    uint8_t re[1000];
+    uint8_t re[2000];
     size_t n = pack7(raw, PROFILE_BYTES, re);
     std::vector<uint8_t> pl = {2};
     pl.insert(pl.end(), re, re + n);
@@ -308,7 +308,7 @@ static void testAftertouch() {
     e.begin(0);
     Profile p = e.activeProfile();
     p.sens.atMode = AT_POLY;
-    uint8_t raw[PROFILE_BYTES], packed[1000];
+    uint8_t raw[PROFILE_BYTES], packed[2000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};
@@ -417,7 +417,7 @@ static void testRootPick() {
     Profile p = e.activeProfile();
     int b = buttonAt(SIDE_LEFT, 4);
     p.ctl[CTL_BUTTON0 + b] = Control{MSG_ACTION, 0, ACT_ROOT, 0, 0, 0, 0, 0};
-    uint8_t raw[PROFILE_BYTES], packed[1000];
+    uint8_t raw[PROFILE_BYTES], packed[2000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};
@@ -453,7 +453,7 @@ static void testBluetoothAndProfileButtons() {
     Profile p = e.activeProfile();
     p.ctl[CTL_BUTTON0 + 0] = Control{MSG_ACTION, 0, ACT_BLUETOOTH, 0, 0, 0, 0, 0};
     p.ctl[CTL_BUTTON0 + 1] = Control{MSG_ACTION, 0, ACT_PROFILE, 0, 2, 0, 0, 0};
-    uint8_t raw[PROFILE_BYTES], packed[1000];
+    uint8_t raw[PROFILE_BYTES], packed[2000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};
@@ -504,7 +504,7 @@ static void testScalePick() {
     int sb = buttonAt(SIDE_LEFT, 5), rb = buttonAt(SIDE_LEFT, 4);
     p.ctl[CTL_BUTTON0 + sb] = Control{MSG_ACTION, 0, ACT_SCALE, 0, 0, 0, 0, 0};
     p.ctl[CTL_BUTTON0 + rb] = Control{MSG_ACTION, 0, ACT_ROOT, 0, 0, 0, 0, 0};
-    uint8_t raw[PROFILE_BYTES], packed[1000];
+    uint8_t raw[PROFILE_BYTES], packed[2000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};
@@ -534,7 +534,7 @@ static void testFollowHostOff() {
     Profile p = e.activeProfile();
     p.keys.followHost = 0;
     p.keys.root = 2;
-    uint8_t raw[PROFILE_BYTES], packed[1000];
+    uint8_t raw[PROFILE_BYTES], packed[2000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};

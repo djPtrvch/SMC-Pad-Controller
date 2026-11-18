@@ -13,7 +13,7 @@
 static BLEService cfgService("4a50c0f1-0b1e-4d1a-9a7d-7d4a50000001");
 static BLECharacteristic cfgChar("4a50c0f1-0b1e-4d1a-9a7d-7d4a50000002",
                                  BLEWrite | BLEWriteWithoutResponse | BLENotify, 20);
-static uint8_t cfgRx[1024];
+static uint8_t cfgRx[2048];
 static volatile uint16_t cfgHead, cfgTail;
 static bool bleStarted, bleWanted;
 

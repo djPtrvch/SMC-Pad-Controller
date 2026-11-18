@@ -1,13 +1,14 @@
 // The JamboPad protocol and data, the same bytes as firmware/JamboPad/jp_config.cpp (docs/sysex.md).
 // protocol.test.ts checks it against tests/vectors/vectors.json written by the firmware's host tests.
 
-export const FORMAT_VERSION = 2;
-export const PADS = 16, BUTTONS = 10, KNOBS = 8, LAYERS = 4;
+export const FORMAT_VERSION = 3;
+export const PADS = 16, BUTTONS = 10, KNOBS = 8;
+export const LAYERS = 10;          // pad banks: up to one per button
 export const CTL_BUTTON0 = LAYERS * PADS, CTL_KNOB0 = CTL_BUTTON0 + BUTTONS;
 export const CONTROLS = CTL_KNOB0 + KNOBS;
 export const PROFILES = 4;
 export const NAME_LEN = 12;
-export const PROFILE_BYTES = 743;
+export const PROFILE_BYTES = 1559;
 export const DEVICE_BYTES = 6;
 
 export const enum Side { RIGHT = 0, LEFT = 1 }
@@ -148,7 +149,7 @@ export function sanitize(p: Profile): void {
       if (x.mode > 1) x.mode = 0;
       if (x.type === MSG_ACTION) {
         if (x.number >= ACTIONS.length) x.number = 0;
-        x.a = x.a < LAYERS ? x.a : 0;
+        x.a = x.a < (x.number === 5 ? PROFILES : LAYERS) ? x.a : 0;
       } else {
         x.a = 0;
       }
@@ -240,15 +241,14 @@ export function defaultProfile(side: Side): Profile {
     }
   };
   const offPads = (L: number) => { for (let pad = 0; pad < PADS; pad++) c[L * PADS + pad] = ctl(0, 0, 0, 0, 0, 1, 5); };
+  for (let L = 0; L < LAYERS; L++) { layer[L] = layerOf(LAYER_OFF, 0, 0, 4, 5, 1, 0, 7); offPads(L); }
   if (side === Side.LEFT) {
     custom(0, 1, 0, 5);
     layer[1] = layerOf(LAYER_KEYS, 3, 0, 4, 5, 1, 0, 7);
     custom(2, 4, 0, 2);
     custom(3, 5, 0, 1);
-    offPads(1);
   } else {
     custom(0, 2, 0, 5);
-    for (let L = 1; L < LAYERS; L++) { layer[L] = layerOf(LAYER_OFF, 0, 0, 4, 5, 1, 0, 7); offPads(L); }
   }
   const ch = side === Side.LEFT ? 1 : 2;
   for (let b = 0; b < BUTTONS; b++) {

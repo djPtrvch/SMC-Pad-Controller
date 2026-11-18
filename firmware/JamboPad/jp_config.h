@@ -7,12 +7,14 @@
 
 namespace jp {
 
-static const uint8_t FW_MAJOR = 0, FW_MINOR = 5, FW_PATCH = 0;
-static const uint8_t FORMAT_VERSION = 2;
+static const uint8_t FW_MAJOR = 0, FW_MINOR = 6, FW_PATCH = 0;
+static const uint8_t FORMAT_VERSION = 3;
 
-static const int PADS = 16, BUTTONS = 10, KNOBS = 8, LAYERS = 4;
+static const int PADS = 16, BUTTONS = 10, KNOBS = 8;
+// pad banks ("layers" in the code): up to one per button
+static const int LAYERS = 10;
 // control index: layer L's pads L*16 .. L*16+15, then buttons, then knobs
-static const int CTL_BUTTON0 = LAYERS * PADS;               // 64
+static const int CTL_BUTTON0 = LAYERS * PADS;               // 160
 static const int CTL_KNOB0 = CTL_BUTTON0 + BUTTONS;         // 74
 static const int CONTROLS = CTL_KNOB0 + KNOBS;              // 82
 static const int PROFILES = 4;
@@ -104,7 +106,7 @@ extern const uint16_t SCALE_MASKS[SCALE_COUNT];     // bit k: k semitones above 
 int scaleSteps(uint16_t mask, uint8_t steps[12]);   // the mask's semitones, ascending; returns their number
 
 // ------------------------------------------------------------------ byte layout
-static const int PROFILE_BYTES = 743;   // see docs/sysex.md
+static const int PROFILE_BYTES = 1559;  // see docs/sysex.md
 static const int DEVICE_BYTES = 6;
 void serializeProfile(const Profile &p, uint8_t out[PROFILE_BYTES]);
 bool deserializeProfile(const uint8_t in[PROFILE_BYTES], Profile &p);   // false: other version

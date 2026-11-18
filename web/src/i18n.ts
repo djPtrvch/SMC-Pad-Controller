@@ -58,6 +58,8 @@ const RU: Record<string, string> = {
   // layout
   'Tap a control to edit it. Changes go to the pads at once; SAVE writes them to their memory.':
     'Тапните элемент, чтобы настроить его. Изменения сразу уходят в пэды; СОХРАНИТЬ записывает их в память.',
+  'Tap a control to edit it; tap a button that opens a bank to see and set up that bank. Changes go to the pads at once; SAVE writes them to their memory.':
+    'Тапните элемент, чтобы настроить его; тап по кнопке банка показывает пэды этого банка. Изменения сразу уходят в пэды; СОХРАНИТЬ записывает их в память.',
   'IDENTIFY: touch a control on a pad — it lights up here. Check that the drawing matches the device.':
     'ОПОЗНАТЬ: нажмите элемент на пэде — он подсветится здесь. Проверьте, что схема совпадает с устройством.',
   IDENTIFY: 'ОПОЗНАТЬ', 'Virtual pad:': 'Виртуальный пэд:', HIT: 'УДАР', TURN: 'ПОВОРОТ', PRESS: 'НАЖАТЬ',
@@ -68,7 +70,7 @@ const RU: Record<string, string> = {
   'IDLE COLOR': 'ЦВЕТ В ПОКОЕ', 'PRESSED COLOR': 'ЦВЕТ ПРИ НАЖАТИИ', 'HOST COLOR': 'ЦВЕТ ОТ ПРИЛОЖЕНИЯ', 'when the app lights it': 'когда его зажигает приложение',
   'APPLY TO BANK': 'НА ВЕСЬ БАНК', 'COLOR AS ITS BUTTON': 'ЦВЕТ КАК У КНОПКИ', 'the bank takes the colour of the button that opens it': 'банк берёт цвет кнопки, которая его открывает', 'no button opens this bank yet': 'этот банк пока не открывает ни одна кнопка', off: 'выкл', 'NUMBER PADS FROM HERE': 'НУМЕРОВАТЬ ОТСЮДА',
   BANK: 'БАНК', 'PAD BANK': 'БАНК ПЭДОВ', 'OCTAVE UP': 'ОКТАВА ВВЕРХ', 'OCTAVE DOWN': 'ОКТАВА ВНИЗ', 'KEY NOTE (HOLD)': 'ТОНИКА (УДЕРЖАНИЕ)', 'PROFILE (ALL SETTINGS)': 'ПРОФИЛЬ (ВСЕ НАСТРОЙКИ)', 'SCALE (HOLD)': 'ГАММА (УДЕРЖАНИЕ)', PROFILE: 'ПРОФИЛЬ',
-  'switches the pads to this bank': 'переключает пэды на этот банк',
+  'the pads switch to this bank; its pads are set up below': 'пэды переключаются на этот банк; его пэды настраиваются ниже', 'start bank': 'стартовый банк', 'no button': 'нет кнопки',
   'Hold the button: the three lower rows of pads are C … B, the key note is lit; tap a pad to pick it. The pad tells the app.':
     'Держите кнопку: три нижних ряда пэдов — C … B, тоника подсвечена; тап по пэду выбирает её. Пэд сообщает её приложению.',
   'Hold the button: the 11 lowest pads are the scales (Major, Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Harm Minor, Pent Major, Pent Minor, Chromatic — from the bottom-left), the current one is lit; tap a pad to pick it. The pad tells the app.':
@@ -137,6 +139,7 @@ const RU_PATTERNS: [RegExp, string | ((...m: string[]) => string)][] = [
   [/^PAD LIGHTS · (LEFT|RIGHT)$/, (_, s) => `ПОДСВЕТКА · ${s === 'LEFT' ? 'ЛЕВЫЙ' : 'ПРАВЫЙ'}`],
   [/^GAIN · PAD (\d+)$/, 'УСИЛЕНИЕ · ПЭД $1'],
   [/^picked by (.+)$/, 'выбирается кнопкой $1'],
+  [/^button (.+)$/, 'кнопка $1'],
   [/^lowest note (.+)$/, 'нижняя нота $1'],
   [/^(LEFT|RIGHT) \(offline\)$/, (_, s) => `${s === 'LEFT' ? 'ЛЕВЫЙ' : 'ПРАВЫЙ'} (не подключён)`],
   [/^Writing… (\d+)% — do not unplug the pad\.$/, 'Запись… $1% — не отключайте пэд.'],
