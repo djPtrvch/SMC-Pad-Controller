@@ -1,6 +1,6 @@
 // JamboPad configurator: tabs, header with SAVE, status line.
 import { Tab, anyUnsaved, app, changed, onChange, run } from './state';
-import { h } from './ui/dom';
+import { fitText, h } from './ui/dom';
 import { devicePage } from './ui/devicepage';
 import { layoutPage } from './ui/layout';
 import { profilesPage } from './ui/profiles';
@@ -47,6 +47,7 @@ function render() {
       page,
     ].filter((x): x is HTMLElement => x !== null),
   );
+  fitText(root);
   window.scrollTo(0, scroll);
 }
 
@@ -65,6 +66,8 @@ setInterval(() => {
     changed();
   }
 }, 250);
+
+window.addEventListener('resize', () => fitText(root));
 
 window.addEventListener('beforeunload', (e) => {
   if (anyUnsaved()) e.preventDefault();

@@ -26,7 +26,7 @@ enum Command : uint8_t {
     CMD_BOOTLOADER = 0x09, CMD_FACTORY_RESET = 0x0A, CMD_IDENTIFY = 0x0B,
     CMD_SET_SCALE = 0x0C, CMD_SET_MIDI_OUT = 0x0D, CMD_SET_LAYER = 0x0E,
     REPLY = 0x40,                   // a reply is the command | 0x40
-    EV_PRESSURE = 0x60, EV_HIT = 0x61, EV_IDENTIFY = 0x62, EV_PROFILE = 0x63, EV_LAYER = 0x64,
+    EV_PRESSURE = 0x60, EV_HIT = 0x61, EV_IDENTIFY = 0x62, EV_PROFILE = 0x63, EV_LAYER = 0x64, EV_ROOT = 0x65,
 };
 enum Status : uint8_t { ST_OK = 0, ST_BAD_ARGS = 1, ST_STORE_ERROR = 2 };
 
@@ -50,6 +50,7 @@ public:
     const Profile &activeProfile() const { return prof[dev.active]; }
     uint8_t knobValue(int k) const { return knobVal[k]; }
     bool menuOpen() const { return menu; }
+    bool pickingRoot() const { return rootPick >= 0; }
     int layer() const { return curLayer; }
     int octave() const { return keyOctave; }
     int root() const { return keyRoot; }
@@ -92,6 +93,7 @@ private:
     bool rgbOverrideOn[PADS] = {};
 
     bool menu = false;
+    int rootPick = -1;             // the button held with ACTION ROOT, -1: none
     bool monitor = false;
     bool identify = false;
     uint32_t monitorAt = 0;
@@ -128,6 +130,7 @@ private:
     uint32_t padColor(int pad);
     void checkMenu();
     int menuSlot(int pad) const;    // 0..3 when the pad is in the top row, else -1
+    int rootSlot(int pad) const;    // 0..11 (C..B) for the three lower rows, else -1
 };
 
 }  // namespace jp

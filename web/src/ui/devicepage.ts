@@ -4,7 +4,7 @@ import { DfuDevice } from '../dfu';
 import { PROFILES, Side, THRU_MODES } from '../protocol';
 import { SimDevice } from '../sim';
 import { Unit, app, attach, changed, detach, run, swapSides } from '../state';
-import { field, h, pickFile, segmented } from './dom';
+import { field, h, pickFile, segmented, toggle } from './dom';
 import { installSection } from './install';
 
 const ui = {
@@ -103,10 +103,11 @@ function unitCard(u: Unit): HTMLElement {
       await u.dev!.setMidiOut(v, hello.controlsOut);
       hello.thru = v;
     })), 'CLOCK: clock, start and stop from JAMbo (SYNC → MIDI CLOCK → SEND, CLOCK OUTPUT: ALL OUTPUTS); ALL: everything the app sends to this pad'),
-    field('PAD MESSAGES', segmented(['OFF', 'ON'], hello.controlsOut, (v) => run('midi out', async () => {
-      await u.dev!.setMidiOut(hello.thru, v);
-      hello.controlsOut = v;
-    })), 'the pads, buttons and knobs also play a synth on MIDI OUT'),
+    toggle('PAD MESSAGES', !!hello.controlsOut, (v) => run('midi out', async () => {
+      await u.dev!.setMidiOut(hello.thru, v ? 1 : 0);
+      hello.controlsOut = v ? 1 : 0;
+    }), 'the pads, buttons and knobs also go to MIDI OUT'),
+    h('p', { class: 'hint' }, 'TRS type A or B is the wiring inside the pad, not a setting: use the matching adapter (or a switchable one).'),
     h('div', { class: 'row' },
       h('button', { onclick: () => detach(u) }, 'DISCONNECT'),
       h('button', {

@@ -7,7 +7,7 @@
 
 namespace jp {
 
-static const uint8_t FW_MAJOR = 0, FW_MINOR = 2, FW_PATCH = 0;
+static const uint8_t FW_MAJOR = 0, FW_MINOR = 3, FW_PATCH = 0;
 static const uint8_t FORMAT_VERSION = 2;
 
 static const int PADS = 16, BUTTONS = 10, KNOBS = 8, LAYERS = 4;
@@ -24,7 +24,8 @@ static const int NAME_LEN = 12;
 enum Side : uint8_t { SIDE_RIGHT = 0, SIDE_LEFT = 1 };      // LEFT = the unit turned by 180 degrees
 
 enum MsgType : uint8_t { MSG_OFF = 0, MSG_NOTE = 1, MSG_CC = 2, MSG_PC = 3, MSG_ACTION = 4 };   // ACTION: buttons only
-enum Action : uint8_t { ACT_LAYER = 0, ACT_OCT_UP = 1, ACT_OCT_DOWN = 2, ACT_COUNT };          // number = action, a = layer
+// number = action, a = layer. ROOT: while held, the 12 lowest pads pick the key note (C..B)
+enum Action : uint8_t { ACT_LAYER = 0, ACT_OCT_UP = 1, ACT_OCT_DOWN = 2, ACT_ROOT = 3, ACT_COUNT };
 enum ButtonMode : uint8_t { MODE_MOMENTARY = 0, MODE_TOGGLE = 1 };
 enum KnobMode : uint8_t { KNOB_ABS = 0, KNOB_REL64 = 1, KNOB_REL2C = 2, KNOB_RELSIGN = 3 };
 enum Curve : uint8_t {

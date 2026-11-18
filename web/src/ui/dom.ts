@@ -58,3 +58,24 @@ export function pickFile(accept: string): Promise<File | null> {
     input.click();
   });
 }
+
+// on / off: a switch as on iOS (row: label left, switch right); tap anywhere on the row
+export function toggle(label: string, on: boolean, onChange: (v: boolean) => void, hint?: string) {
+  return h('div', { class: 'toggle-row', role: 'switch', 'aria-checked': on ? 'true' : 'false', onclick: () => onChange(!on) },
+    h('div', { class: 'toggle-text' }, h('span', { class: 'toggle-label' }, label), hint ? h('span', { class: 'hint' }, hint) : null),
+    h('span', { class: 'switch' + (on ? ' on' : '') }, h('span', { class: 'knob' })));
+}
+
+// text that does not fit its button gets smaller (down to 10 px), then wraps
+export function fitText(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>('button, .badge').forEach((el) => {
+    el.style.fontSize = '';
+    el.style.whiteSpace = '';
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth + 1 && size > 10) {
+      size -= 1;
+      el.style.fontSize = `${size}px`;
+    }
+    if (el.scrollWidth > el.clientWidth + 1) el.style.whiteSpace = 'normal';
+  });
+}

@@ -406,6 +406,43 @@ static void testLayersAndKeys() {
     CHECK(hal.rgb[padAt(SIDE_LEFT, 3, 1)] == paletteRgb(2, 127));
 }
 
+static void testRootPick() {
+    MockHal hal;
+    sideLeft(hal);
+    Engine e(hal);
+    e.begin(0);
+    // make the left unit's LFO1 button (slot 4) a ROOT button
+    Profile p = e.activeProfile();
+    int b = buttonAt(SIDE_LEFT, 4);
+    p.ctl[CTL_BUTTON0 + b] = Control{MSG_ACTION, 0, ACT_ROOT, 0, 0, 0, 0, 0};
+    uint8_t raw[PROFILE_BYTES], packed[1000];
+    serializeProfile(p, raw);
+    size_t n = pack7(raw, PROFILE_BYTES, packed);
+    std::vector<uint8_t> pl = {0};
+    pl.insert(pl.end(), packed, packed + n);
+    feed(e, sysex(CMD_SET_PROFILE, pl));
+    e.buttonEvent(b, true, 0);
+    CHECK(e.pickingRoot());
+    e.tick(0);
+    CHECK(hal.rgb[padAt(SIDE_LEFT, 3, 0)] == paletteRgb(5, 127));      // C is the root: lit
+    CHECK(hal.rgb[padAt(SIDE_LEFT, 0, 0)] == 0);                       // top row: unused
+    hal.out.clear();
+    uint32_t t = 0;
+    int g = padAt(SIDE_LEFT, 2, 3);                                    // second row from the bottom, last: 4 + 3 = G
+    for (int k = 0; k < 5; k++) { e.padSample(g, 900, t); t += 3; }
+    e.padSample(g, 0, t);
+    CHECK(e.root() == 7);
+    CHECK(hal.out.size() == 1 && hal.out[0][4] == EV_ROOT && hal.out[0][5] == 7);   // no notes, the event
+    e.buttonEvent(b, false, 0);
+    CHECK(!e.pickingRoot());
+    // KEYS now starts on G
+    e.buttonEvent(buttonAt(SIDE_LEFT, 1), true, 0);
+    hal.out.clear();
+    int bl = padAt(SIDE_LEFT, 3, 0);
+    for (int k = 0; k < 5; k++) { e.padSample(bl, 900, t); t += 3; }
+    CHECK(hal.out[0][0] == 0x93 && hal.out[0][1] == 12 * 4 + 7);
+}
+
 static void testFollowHostOff() {
     MockHal hal;
     sideLeft(hal);
@@ -514,6 +551,7 @@ int main(int argc, char **argv) {
     testKeysNotes();
     testLayersAndKeys();
     testFollowHostOff();
+    testRootPick();
     testThru();
     if (argc > 1) writeVectors(argv[1]);
     std::printf(failures ? "%d FAILED\n" : "all tests passed\n", failures);

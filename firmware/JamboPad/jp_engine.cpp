@@ -166,6 +166,17 @@ void Engine::padOn(int pad, uint8_t vel) {
         }
         return;
     }
+    if (rootPick >= 0) {
+        menuPad[pad] = true;                        // no MIDI for this press
+        int k = rootSlot(pad);
+        if (k >= 0) {
+            keyRoot = (uint8_t)k;
+            ledDirty = true;
+            uint8_t ev[1] = {(uint8_t)k};
+            sendSysex(EV_ROOT, ev, 1);              // the app can follow (docs/jambo.md)
+        }
+        return;
+    }
     const Profile &p = prof[dev.active];
     const Layer &l = p.layer[curLayer];
     if (l.type == LAYER_KEYS) {
@@ -225,7 +236,13 @@ void Engine::buttonEvent(int button, bool down, uint32_t nowMs) {
     }
     const Control &x = prof[dev.active].ctl[CTL_BUTTON0 + button];
     if (x.type == MSG_ACTION) {
-        if (down) buttonAction(x);
+        if (x.number == ACT_ROOT) {
+            if (down) rootPick = button;
+            else if (rootPick == button) rootPick = -1;
+            ledDirty = true;
+        } else if (down) {
+            buttonAction(x);
+        }
         return;
     }
     if (down) controlPress(CTL_BUTTON0 + button, 127);
@@ -247,6 +264,13 @@ void Engine::checkMenu() {
         menu = open;
         ledDirty = true;
     }
+}
+
+int Engine::rootSlot(int pad) const {
+    int row, col;
+    padPosition((Side)dev.side, pad, row, col);
+    int k = (3 - row) * 4 + col;                    // from the bottom-left, as the unit sits
+    return k < 12 ? k : -1;
 }
 
 int Engine::menuSlot(int pad) const {
@@ -567,6 +591,12 @@ uint32_t Engine::padColor(int pad) {
         int slot = menuSlot(pad);
         return slot < 0 ? 0 : paletteRgb(slot == dev.active ? 1 : 11, slot == dev.active ? 127 : 24);
     }
+    if (rootPick >= 0) {
+        int k = rootSlot(pad);
+        if (k < 0) return 0;
+        if (pressed) return paletteRgb(1, 127);
+        return k == keyRoot ? paletteRgb(5, 127) : paletteRgb(1, 20);
+    }
     const Layer &l = p.layer[curLayer];
     if (l.type == LAYER_KEYS) {
         int row, col, kind;
@@ -597,7 +627,7 @@ void Engine::updateLeds() {
         int ctl = CTL_BUTTON0 + b;
         const Control &x = p.ctl[ctl];
         bool on;
-        if (x.type == MSG_ACTION) on = x.number == ACT_LAYER ? x.a == curLayer : btnDown[b];
+        if (x.type == MSG_ACTION) on = x.number == ACT_LAYER ? x.a == curLayer : btnDown[b];      // ROOT, OCT: while held
         else if (p.ledMode == LED_HOST) on = hostVal[ctl] > 0;
         else if (p.ledMode == LED_LOCAL) on = btnDown[b] || toggled[ctl];
         else on = btnDown[b] || hostVal[ctl] > 0 || (toggled[ctl] && !hostSeen[ctl]);

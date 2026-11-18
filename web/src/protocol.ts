@@ -13,7 +13,7 @@ export const DEVICE_BYTES = 5;
 export const enum Side { RIGHT = 0, LEFT = 1 }
 export const MSG_TYPES = ['OFF', 'NOTE', 'CC', 'PC'] as const;
 export const MSG_ACTION = 4;
-export const ACTIONS = ['LAYER', 'OCTAVE UP', 'OCTAVE DOWN'] as const;
+export const ACTIONS = ['LAYER', 'OCTAVE UP', 'OCTAVE DOWN', 'KEY NOTE (HOLD)'] as const;
 export const LAYER_TYPES = ['OFF', 'CUSTOM', 'KEYS'] as const;
 export const LAYER_OFF = 0, LAYER_CUSTOM = 1, LAYER_KEYS = 2;
 export const KEYS_LAYOUTS = ['CHROMATIC', 'IN KEY'] as const;
@@ -340,7 +340,7 @@ export const CMD = {
   SET_SCALE: 0x0c, SET_MIDI_OUT: 0x0d, SET_LAYER: 0x0e,
 } as const;
 export const REPLY = 0x40;
-export const EV = { PRESSURE: 0x60, HIT: 0x61, IDENTIFY: 0x62, PROFILE: 0x63, LAYER: 0x64 } as const;
+export const EV = { PRESSURE: 0x60, HIT: 0x61, IDENTIFY: 0x62, PROFILE: 0x63, LAYER: 0x64, ROOT: 0x65 } as const;
 
 export const sysex = (cmd: number, data: ArrayLike<number> = []) => Uint8Array.from([...SYSEX_ID, cmd, ...Array.from(data), 0xf7]);
 

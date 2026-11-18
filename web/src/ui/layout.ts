@@ -6,7 +6,7 @@ import {
   isPad, keysNote, knobPosition, noteName, padAt, padPosition, paletteRgb,
 } from '../protocol';
 import { Unit, app, changed, profileEdited, profileOf, run } from '../state';
-import { field, h, num, segmented, select } from './dom';
+import { field, h, num, segmented, select, toggle } from './dom';
 
 // A unit in the RIGHT orientation (as it comes, checked on the photo): knobs | pads | buttons.
 const W = 780, H = 480, GAP = 40;
@@ -44,7 +44,7 @@ export function controlName(u: Unit, ctl: number): string {
 
 function shortMsg(p: Profile, ctl: number): string {
   const x = p.ctl[ctl];
-  if (x.type === MSG_ACTION) return x.number === 0 ? `LAYER ${x.a + 1}` : x.number === 1 ? 'OCT +' : 'OCT −';
+  if (x.type === MSG_ACTION) return x.number === 0 ? `LAYER ${x.a + 1}` : x.number === 1 ? 'OCTAVE +' : x.number === 2 ? 'OCTAVE −' : 'KEY NOTE';
   if (x.type === 0) return '—';
   return `${['', 'N', 'CC', 'PC'][x.type]} ${x.number}`;
 }
@@ -95,7 +95,7 @@ function drawUnit(svg: SVGSVGElement, u: Unit, ox: number, onTap: (u: Unit, ctl:
         color = x.a;
         level = 40;
         t1 = shortMsg(p, ctl);
-        t2 = x.type ? `ch ${x.channel + 1}${x.mode ? ' · T' : ''}` : '';
+        t2 = x.type ? `ch ${x.channel + 1}${x.mode ? ' · TOGGLE' : ''}` : '';
       }
       g.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'pad' + (flash ? ' flash' : '') }));
       const rgb = color ? paletteRgb(color, 127) : 0;
@@ -129,7 +129,7 @@ function drawUnit(svg: SVGSVGElement, u: Unit, ox: number, onTap: (u: Unit, ctl:
       const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
       g.append(s('circle', { cx, cy, r: r.w / 2, class: 'knob' + (flash ? ' flash' : '') }));
       g.append(s('text', { x: cx, y: cy - 2, class: 't1 light' }, shortMsg(p, ctl)));
-      g.append(s('text', { x: cx, y: cy + 18, class: 't2' }, x.type ? (x.mode ? 'REL' : 'ABS') : ''));
+      g.append(s('text', { x: cx, y: cy + 18, class: 't2 small' }, x.type ? (x.mode ? 'RELATIVE' : 'ABSOLUTE') : ''));
     });
   }
   svg.append(root);
@@ -176,6 +176,7 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
   if (x.type === MSG_ACTION) {
     kids.push(field('ACTION', select(ACTIONS, x.number, (v) => edit(() => { x.number = v; }))));
     if (x.number === 0) kids.push(field('LAYER', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'switches the pads to this layer'));
+    if (x.number === 3) kids.push(h('p', { class: 'hint' }, 'Hold the button: the three lower rows of pads are C … B, the key note is lit; tap a pad to pick it. The pad tells the app.'));
   } else if (x.type) {
     kids.push(field('CHANNEL', channelSelect(x.channel, (v) => edit(() => { x.channel = v; }))));
     kids.push(field(x.type === 1 ? 'NOTE' : x.type === 2 ? 'CC NUMBER' : 'PROGRAM', num(x.number, 0, 127, (v) => edit(() => { x.number = v; })),
@@ -223,7 +224,7 @@ function layerEditor(u: Unit): HTMLElement {
       if (L === 0 && v === LAYER_OFF) return;   // layer 1 always exists
       l.type = v;
     })), L === 0 ? 'layer 1 is always there' : pickers.length ? `picked by ${pickers.join(', ')}` : 'set a button to ACTION → LAYER to pick it'),
-    field('START LAYER', h('input', { type: 'checkbox', checked: p.startLayer === L, onchange: () => edit(() => { p.startLayer = L; }) }), 'after power-up and profile change'),
+    toggle('START LAYER', p.startLayer === L, (v) => edit(() => { if (v) p.startLayer = L; }), 'the pads show it after power-up and profile change'),
   ];
   if (l.type === LAYER_KEYS) {
     const k = p.keys;
@@ -237,8 +238,8 @@ function layerEditor(u: Unit): HTMLElement {
       field('OUT OF SCALE', colorSelect(l.outColor, (v) => edit(() => { l.outColor = v; }))),
       field('PRESSED COLOR', colorSelect(l.pressedColor, (v) => edit(() => { l.pressedColor = v; }))),
       h('div', { class: 'title' }, 'SCALE'),
-      field('FOLLOW JAMbo', segmented(['OFF', 'ON'], k.followHost, (v) => edit(() => { k.followHost = v; })), 'the app sends its SCALE, ROOT and octave'),
-      field('ROOT', select(NOTE_NAMES, k.root, (v) => edit(() => { k.root = v; }))),
+      toggle('FOLLOW JAMbo', !!k.followHost, (v) => edit(() => { k.followHost = v ? 1 : 0; }), 'the app sends its scale, key note and octave'),
+      field('KEY NOTE', select(NOTE_NAMES, k.root, (v) => edit(() => { k.root = v; }))),
       field('SCALE', select(SCALES.map((x) => x.name), k.scale, (v) => edit(() => { k.scale = v; }))),
       field('OCTAVE', num(k.octave, 0, 7, (v) => edit(() => { k.octave = v; })), `lowest note ${noteName(12 * (k.octave + 1) + k.root)}`),
       u.dev ? h('button', { onclick: () => u.dev!.setScale(k.root, SCALES[k.scale].mask, k.octave) }, 'SEND THIS SCALE TO THE PAD') : null,
