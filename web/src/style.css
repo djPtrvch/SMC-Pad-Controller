@@ -112,8 +112,11 @@ svg .small { font-size: 11px; }
 .swatch.on { border-color: var(--fg); box-shadow: 0 0 0 2px var(--bg) inset; }
 .editor .field:has(.swatches) { grid-column: 1 / -1; }
 .lang .seg button { min-height: 32px; min-width: 40px; font-size: 12px; padding: 0 6px; }
-.bank-line .unit-name { flex-direction: row; gap: 6px; align-items: baseline; }
-.bank-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bank-line { display: flex; flex-direction: column; gap: 4px; }
+.bank-line .unit-name { flex-direction: row; gap: 8px; align-items: baseline; height: 18px; white-space: nowrap; }
+.bank-row { display: flex; align-items: baseline; gap: 8px; height: 20px; white-space: nowrap; overflow: hidden; }
+.bank-row span { white-space: nowrap; }
+svg .hit { fill: transparent; }
 .bank-now { font-size: 13px; font-weight: 800; letter-spacing: .06em; color: var(--accent); }
 .bank-who { font-size: 13px; font-weight: 800; letter-spacing: .06em; }
 .bank-arrow { color: var(--dim); }

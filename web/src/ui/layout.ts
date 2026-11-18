@@ -33,7 +33,7 @@ function keysState(p: Profile) {
 }
 
 export function controlName(u: Unit, ctl: number): string {
-  const unitName = u.side === Side.LEFT ? 'LEFT' : 'RIGHT';
+  const unitName = u.side === Side.LEFT ? 'LEFT CONTROLLER' : 'RIGHT CONTROLLER';
   if (isPad(ctl)) {
     const [row, col] = padPosition(u.side, ctl % PADS);
     return `${unitName} · BANK ${Math.floor(ctl / PADS) + 1} · PAD row ${row + 1}, column ${col + 1}`;
@@ -132,6 +132,7 @@ function drawUnit(svg: SVGSVGElement, u: Unit, ox: number, onTap: (u: Unit, ctl:
     const x = p.ctl[ctl];
     const lit = x.type === MSG_ACTION && x.number === 0 && x.a === L;
     mk(ctl, r, (g, flash) => {
+      g.append(s('rect', { x: r.x - 9, y: r.y - 3, width: r.w + 18, height: r.h + 6, class: 'hit' }));   // a bigger target for a finger
       g.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 6, class: 'btn' + (flash ? ' flash' : '') + (lit ? ' lit' : '') }));
       g.append(s('text', { x: r.x + r.w / 2, y: r.y + 15, class: 't3' }, BUTTON_NAMES[b]));
       g.append(s('text', { x: r.x + r.w / 2, y: r.y + 31, class: 't3 dim' }, shortMsg(p, ctl)));
@@ -331,7 +332,7 @@ function layerEditor(u: Unit): HTMLElement {
       u.dev ? h('button', { onclick: () => u.dev!.setScale(k.root, SCALES[k.scale].mask, k.octave) }, 'SEND THIS SCALE TO THE PAD') : null,
     );
   }
-  return h('div', { class: 'editor' }, h('div', { class: 'title' }, `${u.side === Side.LEFT ? 'LEFT' : 'RIGHT'} · BANK ${L + 1}`), ...kids);
+  return h('div', { class: 'editor' }, h('div', { class: 'title' }, `${u.side === Side.LEFT ? 'LEFT CONTROLLER' : 'RIGHT CONTROLLER'} · BANK ${L + 1}`), ...kids);
 }
 
 function showBank(u: Unit, L: number) {
@@ -348,15 +349,26 @@ function bankLine(u: Unit): HTMLElement {
   // which button, then what it opens (or what the pads show while a KEY NOTE / SCALE button is selected)
   const sel = app.selected && app.selected.side === u.side && isButton(app.selected.ctl) ? app.selected.ctl : -1;
   const sx = sel >= 0 ? p.ctl[sel] : null;
-  const pickName = sx && sx.type === MSG_ACTION && (sx.number === ACT_ROOT || sx.number === ACT_SCALE)
-    ? (sx.number === ACT_ROOT ? 'KEY NOTE (HOLD)' : 'SCALE (HOLD)') : '';
-  const what = pickName || `BANK ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`;
-  const who = pickName ? `BUTTON ${BUTTON_NAMES[sel - CTL_BUTTON0]}` : by ? `BUTTON ${by}` : L === p.startLayer ? 'START BANK' : 'NO BUTTON';
+  // a button tapped: that button and what it does; otherwise the bank shown and the button that opens it
+  const bankName = (n: number) => `BANK ${n + 1}${p.layer[n].type === LAYER_KEYS ? ' KEYS' : ''}`;
+  let who: string, what: string;
+  if (sx) {
+    who = `BUTTON ${BUTTON_NAMES[sel - CTL_BUTTON0]}`;
+    if (sx.type === MSG_ACTION) what = sx.number === 0 ? bankName(sx.a) : sx.number === 5 ? `PROFILE ${sx.a + 1}` : ACTIONS[sx.number];
+    else if (sx.type) what = `${MSG_TYPES[sx.type]} ${sx.number} · CH ${sx.channel + 1}`;
+    else what = 'OFF';
+  } else {
+    who = by ? `BUTTON ${by}` : L === p.startLayer ? 'START BANK' : 'NO BUTTON';
+    what = bankName(L);
+  }
+  void t;
+  // two lines of fixed height: the drawing below never moves when a tap changes the text
   return h('div', { class: 'bank-line' },
-    h('span', { class: 'unit-name' }, u.side === Side.LEFT ? 'LEFT' : 'RIGHT', u.dev ? null : h('span', { class: 'hint' }, 'offline')),
-    h('span', { class: 'bank-who' }, who),
-    h('span', { class: 'bank-arrow' }, '→'),
-    h('span', { class: 'bank-now' }, what));
+    h('div', { class: 'unit-name' }, u.side === Side.LEFT ? 'LEFT CONTROLLER' : 'RIGHT CONTROLLER', u.dev ? null : h('span', { class: 'hint' }, 'offline')),
+    h('div', { class: 'bank-row' },
+      h('span', { class: 'bank-who' }, who),
+      h('span', { class: 'bank-arrow' }, '→'),
+      h('span', { class: 'bank-now' }, what)));
 }
 
 export function layoutPage(): HTMLElement {
@@ -393,8 +405,10 @@ export function layoutPage(): HTMLElement {
   const editors = [
     simRow,
     sel && selUnit && !showLayer ? controlEditor(selUnit, sel.ctl) : null,
-    layerEditor(edited),
-    field(`PAD LIGHTS · ${cur.side === Side.LEFT ? 'LEFT' : 'RIGHT'}`, segmented(LED_MODES, profileOf(cur).ledMode, (v) => { profileOf(cur).ledMode = v; profileEdited(cur); })),
+    // the bank's settings: for its pads and for a button that opens a bank (not for a note, CC or other action)
+    !sel || sel.side !== edited.side || isPad(sel.ctl) || (isButton(sel.ctl) && profileOf(edited).ctl[sel.ctl].type === MSG_ACTION && profileOf(edited).ctl[sel.ctl].number === 0)
+      ? layerEditor(edited) : null,
+    field(`PAD LIGHTS · ${cur.side === Side.LEFT ? 'LEFT CONTROLLER' : 'RIGHT CONTROLLER'}`, segmented(LED_MODES, profileOf(cur).ledMode, (v) => { profileOf(cur).ledMode = v; profileEdited(cur); })),
     h('p', { class: 'hint' }, 'Who lights the pads and buttons. LOCAL: the pad itself — a pad lights while pressed. HOST: only the app (JAMbo shows the steps, mutes, the selected track). BOTH: the app, and a pressed pad flashes too. Banks with KEYS always light the scale themselves.'),
   ];
   // units side by side (wide landscape): the editors below both; stacked (phone): right under the unit edited
