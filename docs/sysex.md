@@ -23,6 +23,7 @@ Implementations: firmware/JamboPad/jp_engine.cpp, web/src/protocol.ts.
 | 0D | SET_MIDI_OUT | thru (0 OFF, 1 CLOCK, 2 ALL), controls 0/1 | status — saved at once |
 | 0E | SET_LAYER | bank 0–9 | status — the pads show this layer (not OFF layers) |
 | 0F | SET_BLUETOOTH | 0/1 | status (sent before switching: off drops a Bluetooth connection) — saved |
+| 11 | DIN_OUT | MIDI bytes, packed (see Packing) | none — firmware 0.7.0 and later; see MIDI OUT |
 
 ## Events (device → host)
 
@@ -97,6 +98,8 @@ Physical numbering (open-smc-pad, matches the photo of the unit): knobs on the l
 ## MIDI OUT (3.5 mm)
 
 PC5, written by software at 31 250 baud (the core sets up no UART for it). THRU: CLOCK — F8, FA, FB, FC from USB; ALL — every message from USB except JAMboPAD SysEx (active sensing FE dropped). Controls to MIDI OUT: the controls' own messages too.
+
+DIN_OUT (`F0 7D 4A 50 11 <packed MIDI bytes> F7`, firmware 0.7.0 and later; HELLO gives the version): the device unpacks the data and writes the bytes to MIDI OUT at once, whatever the THRU mode (OFF too). Any MIDI messages (Note On/Off, CC, Program Change, …), whole messages only. No reply. Empty data or broken packing (a high-bit byte with no bytes after it, high bits set for bytes that are not there) — nothing goes out. The app sets THRU to CLOCK (clock passes straight through, without SysEx) or OFF and sends its notes with DIN_OUT; the lighting feedback then stays off the jack. Over Bluetooth it does not work for now: BLE-MIDI carries no SysEx, so DIN_OUT is USB only. 0x10 is left unused.
 
 ## Bluetooth
 

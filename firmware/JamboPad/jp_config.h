@@ -7,7 +7,7 @@
 
 namespace jp {
 
-static const uint8_t FW_MAJOR = 0, FW_MINOR = 6, FW_PATCH = 0;
+static const uint8_t FW_MAJOR = 0, FW_MINOR = 7, FW_PATCH = 0;
 static const uint8_t FORMAT_VERSION = 3;
 
 static const int PADS = 16, BUTTONS = 10, KNOBS = 8;

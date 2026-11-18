@@ -26,6 +26,7 @@ enum Command : uint8_t {
     CMD_SELECT = 0x05, CMD_SET_SIDE = 0x06, CMD_MONITOR = 0x07, CMD_SET_RGB = 0x08,
     CMD_BOOTLOADER = 0x09, CMD_FACTORY_RESET = 0x0A, CMD_IDENTIFY = 0x0B,
     CMD_SET_SCALE = 0x0C, CMD_SET_MIDI_OUT = 0x0D, CMD_SET_LAYER = 0x0E, CMD_SET_BLUETOOTH = 0x0F,
+    CMD_DIN_OUT = 0x11,             // packed MIDI bytes straight to MIDI OUT, no reply (fw 0.7)
     REPLY = 0x40,                   // a reply is the command | 0x40
     EV_PRESSURE = 0x60, EV_HIT = 0x61, EV_IDENTIFY = 0x62, EV_PROFILE = 0x63, EV_LAYER = 0x64, EV_ROOT = 0x65, EV_BLUETOOTH = 0x66, EV_SCALE = 0x67,
 };

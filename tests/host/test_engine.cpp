@@ -570,6 +570,41 @@ static void testThru() {
     CHECK(e2.device().thru == THRU_ALL && e2.device().controlsOut == 1);
 }
 
+static void testDinOut() {
+    MockHal hal;
+    Engine e(hal);
+    e.begin(0);
+    const std::vector<uint8_t> midi = {0x90, 0x3C, 0x64, 0xB0, 0x07, 0x7F};
+    uint8_t packed[16];
+    size_t k = pack7(midi.data(), midi.size(), packed);
+    std::vector<uint8_t> data(packed, packed + k);
+    for (uint8_t mode : {THRU_OFF, THRU_CLOCK, THRU_ALL}) {
+        feed(e, sysex(CMD_SET_MIDI_OUT, {mode, 0}));
+        hal.din.clear();
+        size_t replies = hal.out.size();
+        feed(e, sysex(CMD_DIN_OUT, data));
+        CHECK(hal.din == midi);                          // exactly these bytes, in any mode
+        CHECK(hal.out.size() == replies);               // no reply
+    }
+    hal.din.clear();
+    feed(e, sysex(CMD_DIN_OUT, {}));                    // empty
+    CHECK(hal.din.empty());
+    feed(e, sysex(CMD_DIN_OUT, {0x00}));                // a high-bit byte with no data
+    CHECK(hal.din.empty());
+    feed(e, sysex(CMD_DIN_OUT, {0x04, 0x10, 0x20}));    // high bit for a byte that is not there
+    CHECK(hal.din.empty());
+    const uint8_t seven[7] = {0x90, 0x3C, 0x64, 0x80, 0x3C, 0x00, 0xF8};
+    k = pack7(seven, 7, packed);                        // a whole group of 7, then a lone high-bit byte
+    std::vector<uint8_t> tail(packed, packed + k);
+    CHECK(tail.size() == 8);
+    feed(e, sysex(CMD_DIN_OUT, tail));                  // the whole group alone goes out
+    CHECK((hal.din == std::vector<uint8_t>(seven, seven + 7)));
+    hal.din.clear();
+    tail.push_back(0x00);
+    feed(e, sysex(CMD_DIN_OUT, tail));
+    CHECK(hal.din.empty());
+}
+
 static void writeVectors(const char *path) {
     FILE *f = std::fopen(path, "w");
     if (!f) { std::printf("cannot write %s\n", path); failures++; return; }
@@ -639,6 +674,7 @@ int main(int argc, char **argv) {
     testPortsDoNotMix();
     testScalePick();
     testThru();
+    testDinOut();
     if (argc > 1) writeVectors(argv[1]);
     std::printf(failures ? "%d FAILED\n" : "all tests passed\n", failures);
     return failures ? 1 : 0;

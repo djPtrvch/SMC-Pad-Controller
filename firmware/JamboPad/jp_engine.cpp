@@ -592,6 +592,17 @@ void Engine::handleSysex(const uint8_t *m, int len) {
             reply(cmd, ST_OK);                      // first: switching off drops a Bluetooth connection
             setBluetooth(pl[0] != 0);
             break;
+        case CMD_DIN_OUT: {                         // whatever the MIDI OUT mode; no reply (sent in time with playing)
+            if (n < 2) break;
+            for (int i = 0; i < n; i += 8) {            // broken packing: a lone high-bit byte or high bits of missing bytes
+                int len = n - i < 8 ? n - i : 8;
+                if (len < 2 || (pl[i] >> (len - 1))) return;
+            }
+            static uint8_t raw[SYSEX_MAX];
+            size_t k = unpack7(pl, (size_t)n, raw);
+            if (k) hal.dinOut(raw, (int)k);
+            break;
+        }
         case CMD_SET_LAYER: {
             if (n < 1 || pl[0] >= LAYERS || prof[dev.active].layer[pl[0]].type == LAYER_OFF) { reply(cmd, ST_BAD_ARGS); break; }
             setLayer(pl[0]);

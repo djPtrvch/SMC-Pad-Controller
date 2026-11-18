@@ -341,6 +341,7 @@ export const CMD = {
   HELLO: 0x01, GET_PROFILE: 0x02, SET_PROFILE: 0x03, SAVE: 0x04, SELECT: 0x05, SET_SIDE: 0x06,
   MONITOR: 0x07, SET_RGB: 0x08, BOOTLOADER: 0x09, FACTORY_RESET: 0x0a, IDENTIFY: 0x0b,
   SET_SCALE: 0x0c, SET_MIDI_OUT: 0x0d, SET_LAYER: 0x0e, SET_BLUETOOTH: 0x0f,
+  DIN_OUT: 0x11, // from the app (JAMbo): packed MIDI bytes to MIDI OUT, fw 0.7.0+
 } as const;
 export const REPLY = 0x40;
 export const EV = { PRESSURE: 0x60, HIT: 0x61, IDENTIFY: 0x62, PROFILE: 0x63, LAYER: 0x64, ROOT: 0x65, BLUETOOTH: 0x66, SCALE: 0x67 } as const;
