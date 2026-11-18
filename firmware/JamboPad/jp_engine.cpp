@@ -12,13 +12,14 @@ static int clampInt(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : 
 
 void Engine::begin(uint32_t nowMs) {
     (void)nowMs;
+    for (int p = 0; p < PADS; p++) pressCtl[p] = PRESS_NONE;
     loadAll();
     applyActive();
     updateLeds();
 }
 
 void Engine::loadAll() {
-    uint8_t buf[PROFILE_BYTES];
+    static uint8_t buf[PROFILE_BYTES];
     if (hal.storeRead(STORE_DEVICE, buf, DEVICE_BYTES) != DEVICE_BYTES || !deserializeDevice(buf, dev)) {
         defaultDevice(dev);
     }
@@ -38,7 +39,7 @@ bool Engine::saveDevice() {
 }
 
 bool Engine::saveProfile(int i) {
-    uint8_t buf[PROFILE_BYTES];
+    static uint8_t buf[PROFILE_BYTES];
     serializeProfile(prof[i], buf);
     bool ok = hal.storeWrite(STORE_DEVICE + 1 + i, buf, PROFILE_BYTES) == PROFILE_BYTES;
     if (ok) profileDirty[i] = false;
@@ -46,20 +47,41 @@ bool Engine::saveProfile(int i) {
 }
 
 void Engine::applyActive() {
-    buildVelocityLut(prof[dev.active].sens, lut);
+    const Profile &p = prof[dev.active];
+    buildVelocityLut(p.sens, lut);
     memset(toggled, 0, sizeof toggled);
     memset(hostVal, 0, sizeof hostVal);
     memset(hostSeen, 0, sizeof hostSeen);
+    curLayer = p.startLayer;
     resetKnobs();
+    applyKeys();
+    ledDirty = true;
+}
+
+void Engine::applyKeys() {
+    const Profile &p = prof[dev.active];
+    if (p.keys.followHost && hostScale) {
+        keyRoot = hostRoot; keyMask = hostMask; keyOctave = hostOctave;
+    } else {
+        keyRoot = p.keys.root; keyMask = SCALE_MASKS[p.keys.scale]; keyOctave = p.keys.octave;
+    }
     ledDirty = true;
 }
 
 void Engine::resetKnobs() {
     const Profile &p = prof[dev.active];
     for (int k = 0; k < KNOBS; k++) {
-        const Control &x = p.ctl[PADS + BUTTONS + k];
+        const Control &x = p.ctl[CTL_KNOB0 + k];
         knobVal[k] = x.a < x.b ? x.a : x.b;
     }
+}
+
+void Engine::setLayer(int L) {
+    if (L < 0 || L >= LAYERS || prof[dev.active].layer[L].type == LAYER_OFF || L == curLayer) return;
+    curLayer = L;
+    ledDirty = true;
+    uint8_t ev[1] = {(uint8_t)L};
+    sendSysex(EV_LAYER, ev, 1);
 }
 
 // ------------------------------------------------------------------ pads
@@ -86,44 +108,47 @@ void Engine::padSample(int pad, uint16_t raw, uint32_t nowMs) {
                     uint8_t ev[5] = {(uint8_t)pad, (uint8_t)(padPeak[pad] & 0x7F), (uint8_t)(padPeak[pad] >> 7), lin, vel};
                     sendSysex(EV_HIT, ev, 5);
                 }
-                padOn(pad, vel, nowMs);
+                padOn(pad, vel);
                 if (raw < s.offThreshold) {
                     padState[pad] = PAD_IDLE;
                     padOff(pad);
                 }
             }
             break;
-        case PAD_HELD:
+        case PAD_HELD: {
             if (raw < s.offThreshold) {
                 padState[pad] = PAD_IDLE;
                 padOff(pad);
                 break;
             }
-            if (s.atMode != AT_OFF && !identify && !menuPad[pad]) {
-                const Control &x = prof[dev.active].ctl[pad];
-                if (x.type != MSG_NOTE) break;
-                uint8_t lvl = pressureLevel(s, pad, raw);
-                if (lvl == atLast[pad] || nowMs - atAt[pad] < s.atIntervalMs) break;
-                atLast[pad] = lvl;
-                atAt[pad] = nowMs;
-                if (s.atMode == AT_POLY) {
-                    send(0xA0 | x.channel, x.number, lvl, 3);
-                } else {
-                    uint8_t mx = 0;
-                    for (int p = 0; p < PADS; p++) if (padState[p] == PAD_HELD && atLast[p] > mx) mx = atLast[p];
-                    if (mx != channelAt) {
-                        channelAt = mx;
-                        send(0xD0 | x.channel, mx, 0, 2);
-                    }
-                }
-            }
+            // aftertouch: only for notes
+            bool isNote = pressCtl[pad] == PRESS_KEYS ||
+                          (pressCtl[pad] >= 0 && prof[dev.active].ctl[pressCtl[pad]].type == MSG_NOTE);
+            if (s.atMode == AT_OFF || !isNote) break;
+            uint8_t lvl = pressureLevel(s, pad, raw);
+            if (lvl == atLast[pad] || nowMs - atAt[pad] < s.atIntervalMs) break;
+            atLast[pad] = lvl;
+            atAt[pad] = nowMs;
+            if (s.atMode == AT_POLY) send(0xA0 | sentCh[pad], sentNote[pad], lvl, 3);
+            else sendChannelAt(sentCh[pad]);
             break;
+        }
     }
 }
 
-void Engine::padOn(int pad, uint8_t vel, uint32_t nowMs) {
-    (void)nowMs;
+void Engine::sendChannelAt(uint8_t ch) {
+    uint8_t mx = 0;
+    for (int p = 0; p < PADS; p++) if (padState[p] == PAD_HELD && pressCtl[p] != PRESS_NONE && atLast[p] > mx) mx = atLast[p];
+    if (mx != channelAt) {
+        channelAt = mx;
+        send(0xD0 | ch, mx, 0, 2);
+    }
+}
+
+void Engine::padOn(int pad, uint8_t vel) {
     ledDirty = true;
+    pressCtl[pad] = PRESS_NONE;
+    atLast[pad] = 0;
     if (identify) {
         uint8_t ev[3] = {0, (uint8_t)pad, vel};
         sendSysex(EV_IDENTIFY, ev, 3);
@@ -141,9 +166,26 @@ void Engine::padOn(int pad, uint8_t vel, uint32_t nowMs) {
         }
         return;
     }
-    padSentVel[pad] = vel;
-    atLast[pad] = 0;
-    controlPress(pad, vel);
+    const Profile &p = prof[dev.active];
+    const Layer &l = p.layer[curLayer];
+    if (l.type == LAYER_KEYS) {
+        int row, col, kind;
+        padPosition((Side)dev.side, pad, row, col);
+        int note = keysNote(l, keyRoot, keyMask, keyOctave, row, col, kind);
+        if (note < 0) return;
+        pressCtl[pad] = PRESS_KEYS;
+        sentCh[pad] = l.channel;
+        sentNote[pad] = (uint8_t)note;
+        send(0x90 | l.channel, (uint8_t)note, vel, 3);
+        return;
+    }
+    int ctl = curLayer * PADS + pad;
+    const Control &x = p.ctl[ctl];
+    if (x.type == MSG_OFF) return;
+    pressCtl[pad] = (int16_t)ctl;
+    sentCh[pad] = x.channel;
+    sentNote[pad] = x.number;
+    controlPress(ctl, vel);
 }
 
 void Engine::padOff(int pad) {
@@ -157,19 +199,15 @@ void Engine::padOff(int pad) {
         menuPad[pad] = false;
         return;
     }
-    const Profile &p = prof[dev.active];
-    const Control &x = p.ctl[pad];
-    if (x.type == MSG_NOTE && p.sens.atMode == AT_POLY && atLast[pad] > 0) send(0xA0 | x.channel, x.number, 0, 3);
+    int16_t was = pressCtl[pad];
+    if (was == PRESS_NONE) return;
+    const Sensitivity &s = prof[dev.active].sens;
+    if (s.atMode == AT_POLY && atLast[pad] > 0) send(0xA0 | sentCh[pad], sentNote[pad], 0, 3);
     atLast[pad] = 0;
-    if (x.type == MSG_NOTE && p.sens.atMode == AT_CHANNEL) {
-        uint8_t mx = 0;
-        for (int q = 0; q < PADS; q++) if (padState[q] == PAD_HELD && atLast[q] > mx) mx = atLast[q];
-        if (mx != channelAt) {
-            channelAt = mx;
-            send(0xD0 | x.channel, mx, 0, 2);
-        }
-    }
-    controlRelease(pad);
+    pressCtl[pad] = PRESS_NONE;
+    if (s.atMode == AT_CHANNEL) sendChannelAt(sentCh[pad]);
+    if (was == PRESS_KEYS) send(0x80 | sentCh[pad], sentNote[pad], 0, 3);
+    else controlRelease(was);
 }
 
 // ------------------------------------------------------------------ buttons and knobs
@@ -185,8 +223,22 @@ void Engine::buttonEvent(int button, bool down, uint32_t nowMs) {
         sendSysex(EV_IDENTIFY, ev, 3);
         return;
     }
-    if (down) controlPress(PADS + button, 127);
-    else controlRelease(PADS + button);
+    const Control &x = prof[dev.active].ctl[CTL_BUTTON0 + button];
+    if (x.type == MSG_ACTION) {
+        if (down) buttonAction(x);
+        return;
+    }
+    if (down) controlPress(CTL_BUTTON0 + button, 127);
+    else controlRelease(CTL_BUTTON0 + button);
+}
+
+void Engine::buttonAction(const Control &x) {
+    switch (x.number) {
+        case ACT_LAYER: setLayer(x.a); break;
+        case ACT_OCT_UP: if (keyOctave < 7) { keyOctave++; ledDirty = true; } break;
+        case ACT_OCT_DOWN: if (keyOctave > 0) { keyOctave--; ledDirty = true; } break;
+        default: break;
+    }
 }
 
 void Engine::checkMenu() {
@@ -210,7 +262,7 @@ void Engine::knobEvent(int knob, int delta) {
         sendSysex(EV_IDENTIFY, ev, 3);
         return;
     }
-    const Control &x = prof[dev.active].ctl[PADS + BUTTONS + knob];
+    const Control &x = prof[dev.active].ctl[CTL_KNOB0 + knob];
     if (x.type == MSG_OFF) return;
     int d = delta * x.c;
     if (x.mode == KNOB_ABS) {
@@ -235,7 +287,7 @@ void Engine::knobEvent(int knob, int delta) {
 
 void Engine::controlPress(int ctl, uint8_t value) {
     const Control &x = prof[dev.active].ctl[ctl];
-    if (x.type == MSG_OFF) return;
+    if (x.type == MSG_OFF || x.type == MSG_ACTION) return;
     if (x.mode == MODE_TOGGLE) {
         toggled[ctl] = !toggled[ctl];
         sendMessage(ctl, toggled[ctl], value);
@@ -246,7 +298,7 @@ void Engine::controlPress(int ctl, uint8_t value) {
 
 void Engine::controlRelease(int ctl) {
     const Control &x = prof[dev.active].ctl[ctl];
-    if (x.type == MSG_OFF || x.mode == MODE_TOGGLE) return;
+    if (x.type == MSG_OFF || x.type == MSG_ACTION || x.mode == MODE_TOGGLE) return;
     sendMessage(ctl, false, 0);
 }
 
@@ -271,6 +323,7 @@ void Engine::sendMessage(int ctl, bool on, uint8_t value) {
 void Engine::send(uint8_t status, uint8_t d1, uint8_t d2, int len) {
     uint8_t m[3] = {status, (uint8_t)(d1 & 0x7F), (uint8_t)(d2 & 0x7F)};
     hal.midiOut(m, len);
+    if (dev.controlsOut) hal.dinOut(m, len);
 }
 
 void Engine::sendSysex(uint8_t cmd, const uint8_t *payload, int len) {
@@ -287,10 +340,14 @@ void Engine::reply(uint8_t cmd, uint8_t status) {
     sendSysex(cmd | REPLY, &status, 1);
 }
 
-// ------------------------------------------------------------------ MIDI in
+// ------------------------------------------------------------------ MIDI in (USB)
 
 void Engine::midiIn(uint8_t b) {
-    if (b >= 0xF8) return;                          // real time: ignored
+    if (b >= 0xF8) {                                // real time: clock and transport to MIDI OUT
+        bool clock = b == 0xF8 || b == 0xFA || b == 0xFB || b == 0xFC;
+        if ((dev.thru == THRU_CLOCK && clock) || (dev.thru == THRU_ALL && b != 0xFE)) hal.dinOut(&b, 1);
+        return;
+    }
     if (b == 0xF0) {
         sysexLen = 0;
         sysex[sysexLen++] = b;
@@ -300,7 +357,8 @@ void Engine::midiIn(uint8_t b) {
     if (b == 0xF7) {
         if (sysexLen > 0 && sysexLen < SYSEX_MAX) {
             sysex[sysexLen++] = b;
-            handleSysex(sysex, sysexLen);
+            if (sysexLen >= 5 && memcmp(sysex, SYSEX_ID, 4) == 0) handleSysex(sysex, sysexLen);
+            else if (dev.thru == THRU_ALL) hal.dinOut(sysex, sysexLen);
         }
         sysexLen = -1;
         return;
@@ -321,6 +379,10 @@ void Engine::midiIn(uint8_t b) {
     uint8_t type = runStatus & 0xF0;
     int need = (type == 0xC0 || type == 0xD0) ? 1 : 2;
     if (dataCount >= need) {
+        if (dev.thru == THRU_ALL) {
+            uint8_t m[3] = {runStatus, data[0], data[1]};
+            hal.dinOut(m, need + 1);
+        }
         handleShort(runStatus, data[0], need == 2 ? data[1] : 0);
         dataCount = 0;
     }
@@ -335,7 +397,8 @@ void Engine::handleShort(uint8_t status, uint8_t d1, uint8_t d2) {
     else if (type == 0xB0) msgType = MSG_CC;
     else return;
     const Profile &p = prof[dev.active];
-    for (int c = 0; c < PADS + BUTTONS; c++) {
+    for (int c = 0; c < CTL_KNOB0; c++) {
+        if (c < CTL_BUTTON0 && p.layer[c / PADS].type != LAYER_CUSTOM) continue;
         const Control &x = p.ctl[c];
         if (x.type == msgType && x.channel == ch && x.number == d1) {
             hostVal[c] = value;
@@ -345,7 +408,7 @@ void Engine::handleShort(uint8_t status, uint8_t d1, uint8_t d2) {
     }
     if (msgType != MSG_CC) return;
     for (int k = 0; k < KNOBS; k++) {
-        const Control &x = p.ctl[PADS + BUTTONS + k];
+        const Control &x = p.ctl[CTL_KNOB0 + k];
         if (x.type == MSG_CC && x.mode == KNOB_ABS && x.channel == ch && x.number == d1) {
             int lo = x.a < x.b ? x.a : x.b, hi = x.a < x.b ? x.b : x.a;
             knobVal[k] = (uint8_t)clampInt(value, lo, hi);
@@ -360,14 +423,15 @@ void Engine::handleSysex(const uint8_t *m, int len) {
     int n = len - 6;
     switch (cmd) {
         case CMD_HELLO: {
-            uint8_t r[8] = {ST_OK, FW_MAJOR, FW_MINOR, FW_PATCH, FORMAT_VERSION, dev.side, dev.active, PROFILES};
-            sendSysex(CMD_HELLO | REPLY, r, 8);
+            uint8_t r[11] = {ST_OK, FW_MAJOR, FW_MINOR, FW_PATCH, FORMAT_VERSION, dev.side, dev.active, PROFILES,
+                             dev.thru, dev.controlsOut, (uint8_t)curLayer};
+            sendSysex(CMD_HELLO | REPLY, r, 11);
             break;
         }
         case CMD_GET_PROFILE: {
             if (n < 1 || pl[0] >= PROFILES) { reply(cmd, ST_BAD_ARGS); break; }
-            uint8_t raw[PROFILE_BYTES];
-            static uint8_t r[2 + 400];
+            static uint8_t raw[PROFILE_BYTES];
+            static uint8_t r[2 + PROFILE_BYTES + PROFILE_BYTES / 7 + 2];
             serializeProfile(prof[pl[0]], raw);
             r[0] = ST_OK;
             r[1] = pl[0];
@@ -377,13 +441,18 @@ void Engine::handleSysex(const uint8_t *m, int len) {
         }
         case CMD_SET_PROFILE: {
             if (n < 1 || pl[0] >= PROFILES || (size_t)(n - 1) != packedSize(PROFILE_BYTES)) { reply(cmd, ST_BAD_ARGS); break; }
-            uint8_t raw[PROFILE_BYTES + 8];
-            Profile t;
+            static uint8_t raw[PROFILE_BYTES + 8];
+            static Profile t;
             if (unpack7(pl + 1, n - 1, raw) != PROFILE_BYTES || !deserializeProfile(raw, t)) { reply(cmd, ST_BAD_ARGS); break; }
             int i = pl[0];
             prof[i] = t;
             profileDirty[i] = true;
-            if (i == dev.active) applyActive();
+            if (i == dev.active) {
+                // keep the layer while editing if it still exists
+                int keep = curLayer;
+                applyActive();
+                if (prof[i].layer[keep].type != LAYER_OFF) curLayer = keep;
+            }
             uint8_t r[2] = {ST_OK, (uint8_t)i};
             sendSysex(cmd | REPLY, r, 2);
             break;
@@ -449,6 +518,28 @@ void Engine::handleSysex(const uint8_t *m, int len) {
             identify = pl[0] != 0;
             reply(cmd, ST_OK);
             break;
+        case CMD_SET_SCALE:
+            // from the app, no reply (it may be sent to every port): root, mask bits 0-6, bits 7-11, octave (127 = keep)
+            if (n < 3) break;
+            hostScale = true;
+            hostRoot = pl[0] % 12;
+            hostMask = (uint16_t)((pl[1] & 0x7F) | (pl[2] & 0x1F) << 7);
+            if (n >= 4 && pl[3] <= 7) hostOctave = pl[3];
+            if (prof[dev.active].keys.followHost) applyKeys();
+            break;
+        case CMD_SET_MIDI_OUT: {
+            if (n < 2 || pl[0] > THRU_ALL) { reply(cmd, ST_BAD_ARGS); break; }
+            dev.thru = pl[0];
+            dev.controlsOut = pl[1] ? 1 : 0;
+            reply(cmd, saveDevice() ? ST_OK : ST_STORE_ERROR);
+            break;
+        }
+        case CMD_SET_LAYER: {
+            if (n < 1 || pl[0] >= LAYERS || prof[dev.active].layer[pl[0]].type == LAYER_OFF) { reply(cmd, ST_BAD_ARGS); break; }
+            setLayer(pl[0]);
+            reply(cmd, ST_OK);
+            break;
+        }
         default:
             break;
     }
@@ -469,42 +560,45 @@ void Engine::tick(uint32_t nowMs) {
     if (ledDirty) updateLeds();
 }
 
-bool Engine::pressedLook(int ctl) const {
-    if (ctl < PADS) return padState[ctl] != PAD_IDLE && !menuPad[ctl];
-    return btnDown[ctl - PADS];
+uint32_t Engine::padColor(int pad) {
+    const Profile &p = prof[dev.active];
+    bool pressed = padState[pad] != PAD_IDLE && !menuPad[pad];
+    if (menu) {
+        int slot = menuSlot(pad);
+        return slot < 0 ? 0 : paletteRgb(slot == dev.active ? 1 : 11, slot == dev.active ? 127 : 24);
+    }
+    const Layer &l = p.layer[curLayer];
+    if (l.type == LAYER_KEYS) {
+        int row, col, kind;
+        padPosition((Side)dev.side, pad, row, col);
+        int note = keysNote(l, keyRoot, keyMask, keyOctave, row, col, kind);
+        if (note < 0) return 0;
+        if (pressed) return paletteRgb(l.pressedColor, 127);
+        if (kind == 2) return paletteRgb(l.rootColor, 127);
+        if (kind == 1) return paletteRgb(l.scaleColor, 40);
+        return paletteRgb(l.outColor, 12);
+    }
+    int ctl = curLayer * PADS + pad;
+    const Control &x = p.ctl[ctl];
+    if (p.ledMode == LED_HOST) return rgbOverrideOn[pad] ? rgbOverride[pad] : paletteRgb(x.c, hostVal[ctl]);
+    if (pressed) return paletteRgb(x.b, 127);
+    if (rgbOverrideOn[pad] && p.ledMode == LED_BOTH) return rgbOverride[pad];
+    if (hostVal[ctl] > 0 && p.ledMode == LED_BOTH) return paletteRgb(x.c, hostVal[ctl]);
+    if (toggled[ctl] && (p.ledMode == LED_LOCAL || !hostSeen[ctl])) return paletteRgb(x.b, 64);
+    return paletteRgb(x.a, 32);
 }
 
 void Engine::updateLeds() {
     ledDirty = false;
     const Profile &p = prof[dev.active];
-    for (int pad = 0; pad < PADS; pad++) {
-        const Control &x = p.ctl[pad];
-        uint32_t rgb;
-        bool pressed = pressedLook(pad);
-        bool host = hostVal[pad] > 0;
-        if (menu) {
-            int slot = menuSlot(pad);
-            rgb = slot < 0 ? 0 : paletteRgb(slot == dev.active ? 1 : 11, slot == dev.active ? 127 : 24);
-        } else if (p.ledMode == LED_HOST) {
-            rgb = rgbOverrideOn[pad] ? rgbOverride[pad] : paletteRgb(x.c, hostVal[pad]);
-        } else if (pressed) {
-            rgb = paletteRgb(x.b, 127);
-        } else if (rgbOverrideOn[pad] && p.ledMode == LED_BOTH) {
-            rgb = rgbOverride[pad];
-        } else if (host && p.ledMode == LED_BOTH) {
-            rgb = paletteRgb(x.c, hostVal[pad]);
-        } else if (toggled[pad] && (p.ledMode == LED_LOCAL || !hostSeen[pad])) {
-            rgb = paletteRgb(x.b, 64);
-        } else {
-            rgb = paletteRgb(x.a, 32);
-        }
-        hal.padRgb(pad, rgb);
-    }
+    for (int pad = 0; pad < PADS; pad++) hal.padRgb(pad, padColor(pad));
     hal.padShow();
     for (int b = 0; b < BUTTONS; b++) {
-        int ctl = PADS + b;
+        int ctl = CTL_BUTTON0 + b;
+        const Control &x = p.ctl[ctl];
         bool on;
-        if (p.ledMode == LED_HOST) on = hostVal[ctl] > 0;
+        if (x.type == MSG_ACTION) on = x.number == ACT_LAYER ? x.a == curLayer : btnDown[b];
+        else if (p.ledMode == LED_HOST) on = hostVal[ctl] > 0;
         else if (p.ledMode == LED_LOCAL) on = btnDown[b] || toggled[ctl];
         else on = btnDown[b] || hostVal[ctl] > 0 || (toggled[ctl] && !hostSeen[ctl]);
         hal.buttonLed(b, on);

@@ -7,6 +7,48 @@ namespace jp {
 static uint8_t clampU8(int v, int lo, int hi) { return (uint8_t)(v < lo ? lo : v > hi ? hi : v); }
 static uint16_t clampU16(int v, int lo, int hi) { return (uint16_t)(v < lo ? lo : v > hi ? hi : v); }
 
+// ------------------------------------------------------------------ scales (JAMbo: Core/Model/Scales.swift)
+
+// bit k: k semitones above the root (checked against the step lists in tests/host)
+const uint16_t SCALE_MASKS[SCALE_COUNT] = {
+    0xAB5,      // Major          0 2 4 5 7 9 11
+    0x5AD,      // Minor          0 2 3 5 7 8 10
+    0x6AD,      // Dorian         0 2 3 5 7 9 10
+    0x5AB,      // Phrygian       0 1 3 5 7 8 10
+    0xAD5,      // Lydian         0 2 4 6 7 9 11
+    0x6B5,      // Mixolydian     0 2 4 5 7 9 10
+    0x56B,      // Locrian        0 1 3 5 6 8 10
+    0x9AD,      // Harmonic minor 0 2 3 5 7 8 11
+    0x295,      // Pent major     0 2 4 7 9
+    0x4A9,      // Pent minor     0 3 5 7 10
+    0xFFF,      // Chromatic
+};
+
+int scaleSteps(uint16_t mask, uint8_t steps[12]) {
+    int n = 0;
+    for (int k = 0; k < 12; k++) if (mask & (1u << k)) steps[n++] = (uint8_t)k;
+    if (n == 0) { steps[0] = 0; n = 1; }
+    return n;
+}
+
+int keysNote(const Layer &l, int root, uint16_t mask, int octave, int row, int col, int &kind) {
+    int vr = 3 - row;                                   // rows counted from the bottom
+    int base = 12 * (octave + 1) + root;
+    int note;
+    if (l.layout == KEYS_IN_KEY) {
+        uint8_t steps[12];
+        int n = scaleSteps(mask | 1, steps);            // the root is always in
+        int k = vr * l.rowStep + col;
+        note = base + 12 * (k / n) + steps[k % n];
+        kind = k % n == 0 ? 2 : 1;
+    } else {
+        note = base + vr * l.rowStep + col;
+        int rel = ((note - root) % 12 + 12) % 12;
+        kind = rel == 0 ? 2 : (mask & (1u << rel)) ? 1 : 0;
+    }
+    return note < 0 || note > 127 ? -1 : note;
+}
+
 // ------------------------------------------------------------------ byte layout
 
 void serializeProfile(const Profile &p, uint8_t *o) {
@@ -27,12 +69,19 @@ void serializeProfile(const Profile &p, uint8_t *o) {
     o[i++] = s.atThreshold & 0xFF;  o[i++] = s.atThreshold >> 8;
     o[i++] = s.atIntervalMs;
     for (int k = 0; k < PADS; k++) o[i++] = s.padGain[k];
+    for (int L = 0; L < LAYERS; L++) {
+        const Layer &l = p.layer[L];
+        o[i++] = l.type; o[i++] = l.channel; o[i++] = l.layout; o[i++] = l.rowStep;
+        o[i++] = l.rootColor; o[i++] = l.scaleColor; o[i++] = l.outColor; o[i++] = l.pressedColor;
+    }
     for (int c = 0; c < CONTROLS; c++) {
         const Control &x = p.ctl[c];
         o[i++] = x.type; o[i++] = x.channel; o[i++] = x.number; o[i++] = x.mode;
         o[i++] = x.a; o[i++] = x.b; o[i++] = x.c; o[i++] = x.d;
     }
     o[i++] = p.ledMode;
+    o[i++] = p.startLayer;
+    o[i++] = p.keys.root; o[i++] = p.keys.scale; o[i++] = p.keys.octave; o[i++] = p.keys.followHost;
 }
 
 bool deserializeProfile(const uint8_t *in, Profile &p) {
@@ -53,12 +102,19 @@ bool deserializeProfile(const uint8_t *in, Profile &p) {
     s.atThreshold = in[i] | in[i + 1] << 8; i += 2;
     s.atIntervalMs = in[i++];
     for (int k = 0; k < PADS; k++) s.padGain[k] = in[i++];
+    for (int L = 0; L < LAYERS; L++) {
+        Layer &l = p.layer[L];
+        l.type = in[i++]; l.channel = in[i++]; l.layout = in[i++]; l.rowStep = in[i++];
+        l.rootColor = in[i++]; l.scaleColor = in[i++]; l.outColor = in[i++]; l.pressedColor = in[i++];
+    }
     for (int c = 0; c < CONTROLS; c++) {
         Control &x = p.ctl[c];
         x.type = in[i++]; x.channel = in[i++]; x.number = in[i++]; x.mode = in[i++];
         x.a = in[i++]; x.b = in[i++]; x.c = in[i++]; x.d = in[i++];
     }
     p.ledMode = in[i++];
+    p.startLayer = in[i++];
+    p.keys.root = in[i++]; p.keys.scale = in[i++]; p.keys.octave = in[i++]; p.keys.followHost = in[i++];
     sanitize(p);
     return true;
 }
@@ -67,12 +123,16 @@ void serializeDevice(const Device &d, uint8_t *o) {
     o[0] = FORMAT_VERSION;
     o[1] = d.side;
     o[2] = d.active;
+    o[3] = d.thru;
+    o[4] = d.controlsOut;
 }
 
 bool deserializeDevice(const uint8_t *in, Device &d) {
     if (in[0] != FORMAT_VERSION) return false;
     d.side = in[1] == SIDE_LEFT ? SIDE_LEFT : SIDE_RIGHT;
     d.active = in[2] < PROFILES ? in[2] : 0;
+    d.thru = in[3] <= THRU_ALL ? in[3] : (uint8_t)THRU_CLOCK;
+    d.controlsOut = in[4] ? 1 : 0;
     return true;
 }
 
@@ -95,23 +155,47 @@ void sanitize(Profile &p) {
     s.atThreshold = clampU16(s.atThreshold, s.onThreshold, s.fullScale - 10);
     s.atIntervalMs = clampU8(s.atIntervalMs, 2, 100);
     for (int k = 0; k < PADS; k++) s.padGain[k] = clampU8(s.padGain[k], 50, 200);
+    for (int L = 0; L < LAYERS; L++) {
+        Layer &l = p.layer[L];
+        if (l.type > LAYER_KEYS) l.type = LAYER_OFF;
+        l.channel &= 0x0F;
+        if (l.layout > KEYS_IN_KEY) l.layout = KEYS_CHROMATIC;
+        l.rowStep = clampU8(l.rowStep, 1, 12);
+        l.rootColor &= 0x0F; l.scaleColor &= 0x0F; l.outColor &= 0x0F; l.pressedColor &= 0x0F;
+    }
+    if (p.layer[0].type == LAYER_OFF) p.layer[0].type = LAYER_CUSTOM;     // there is always a layer
     for (int c = 0; c < CONTROLS; c++) {
         Control &x = p.ctl[c];
-        if (x.type > MSG_PC) x.type = MSG_OFF;
         x.channel &= 0x0F;
         x.number &= 0x7F;
-        if (c >= PADS + BUTTONS) {
-            if (x.type == MSG_PC || x.type == MSG_NOTE) x.type = MSG_CC;     // knobs send CC
+        if (c >= CTL_KNOB0) {
+            if (x.type != MSG_OFF) x.type = MSG_CC;                         // knobs send CC
             if (x.mode > KNOB_RELSIGN) x.mode = KNOB_ABS;
             x.a &= 0x7F; x.b &= 0x7F;
             x.c = clampU8(x.c, 1, 16);
             x.d = 0;
+        } else if (c >= CTL_BUTTON0) {
+            if (x.type > MSG_ACTION) x.type = MSG_OFF;
+            if (x.mode > MODE_TOGGLE) x.mode = MODE_MOMENTARY;
+            if (x.type == MSG_ACTION) {
+                if (x.number >= ACT_COUNT) x.number = ACT_LAYER;
+                x.a = x.a < LAYERS ? x.a : 0;
+            } else {
+                x.a = 0;
+            }
+            x.b = x.c = x.d = 0;
         } else {
+            if (x.type > MSG_PC) x.type = MSG_OFF;
             if (x.mode > MODE_TOGGLE) x.mode = MODE_MOMENTARY;
             x.a &= 0x0F; x.b &= 0x0F; x.c &= 0x0F; x.d = 0;
         }
     }
     if (p.ledMode > LED_BOTH) p.ledMode = LED_BOTH;
+    if (p.startLayer >= LAYERS || p.layer[p.startLayer].type == LAYER_OFF) p.startLayer = 0;
+    p.keys.root %= 12;
+    if (p.keys.scale >= SCALE_COUNT) p.keys.scale = 0;
+    p.keys.octave = clampU8(p.keys.octave, 0, 7);
+    p.keys.followHost = p.keys.followHost ? 1 : 0;
 }
 
 // ------------------------------------------------------------------ 8-to-7 packing
@@ -142,8 +226,8 @@ size_t unpack7(const uint8_t *in, size_t n, uint8_t *out) {
 }
 
 // ------------------------------------------------------------------ geometry
-// RIGHT (as the unit comes): pad 0 bottom-left, rows upwards; knobs 2 columns x 4 rows, knob 0
-// bottom-left; buttons in panel order. LEFT: the same turned by 180 degrees.
+// RIGHT (as the unit comes): knobs on the left (knob 1 bottom-left), pads (pad 1 bottom-left),
+// buttons in a column on the right edge. LEFT: the same turned by 180 degrees.
 
 void padPosition(Side side, int pad, int &row, int &col) {
     row = 3 - pad / 4;
@@ -171,13 +255,28 @@ int buttonSlot(Side side, int button) { return side == SIDE_LEFT ? BUTTONS - 1 -
 int buttonAt(Side side, int slot) { return side == SIDE_LEFT ? BUTTONS - 1 - slot : slot; }
 
 // ------------------------------------------------------------------ defaults
-// JAMbo: 16 knobs = its 4x4 knob grid, CC row * 4 + column on channel 1 (its TWISTER PRESET);
-// the left unit holds columns 1-2, the right one 3-4. Pads: notes 36..51 from the bottom-left,
-// buttons: notes 0..9 in slot order; left unit on channel 2, right on channel 3.
+// JAMbo (docs/jambo.md): knobs = its 4x4 knob grid, CC row * 4 + column on channel 1 (its TWISTER
+// PRESET), the left unit holds columns 1-2. Left unit: layers SEQ (ch 2), KEYS (ch 4), MUTE (ch 5),
+// TRACK (ch 6), picked by its top four buttons; its other buttons notes 4..9 on ch 2. Right unit:
+// one layer, notes 36..51 and buttons notes 0..9 on ch 3. Channels below are 0-based.
 
 void defaultDevice(Device &d) {
     d.side = SIDE_RIGHT;
     d.active = 0;
+    d.thru = THRU_CLOCK;
+    d.controlsOut = 0;
+}
+
+static void customLayer(Profile &p, Side side, int L, uint8_t ch, uint8_t idle, uint8_t host) {
+    p.layer[L] = Layer{LAYER_CUSTOM, ch, KEYS_CHROMATIC, 4, 0, 0, 0, 0};
+    for (int pad = 0; pad < PADS; pad++) {
+        int row, col;
+        padPosition(side, pad, row, col);
+        Control &x = p.ctl[L * PADS + pad];
+        x.type = MSG_NOTE; x.channel = ch; x.number = (uint8_t)(36 + (3 - row) * 4 + col);
+        x.mode = MODE_MOMENTARY;
+        x.a = idle; x.b = 1; x.c = host;
+    }
 }
 
 void defaultProfile(Profile &p, Side side) {
@@ -200,31 +299,39 @@ void defaultProfile(Profile &p, Side side) {
     s.atIntervalMs = 10;
     for (int k = 0; k < PADS; k++) s.padGain[k] = 100;
 
-    uint8_t ch = side == SIDE_LEFT ? 1 : 2;
-    for (int pad = 0; pad < PADS; pad++) {
-        int row, col;
-        padPosition(side, pad, row, col);
-        Control &x = p.ctl[pad];
-        x.type = MSG_NOTE; x.channel = ch; x.number = (uint8_t)(36 + (3 - row) * 4 + col);
-        x.mode = MODE_MOMENTARY;
-        x.a = 0;        // idle: off
-        x.b = 1;        // pressed: white
-        x.c = 5;        // host: yellow
+    if (side == SIDE_LEFT) {
+        customLayer(p, side, 0, 1, 0, 5);                           // SEQ: steps, yellow from the app
+        p.layer[1] = Layer{LAYER_KEYS, 3, KEYS_CHROMATIC, 4, 5, 1, 0, 7};   // KEYS: root yellow, scale white
+        customLayer(p, side, 2, 4, 0, 2);                           // MUTE: red from the app
+        customLayer(p, side, 3, 5, 0, 1);                           // TRACK: white from the app
+        // layer 1's pad controls are unused (KEYS); keep them OFF
+        for (int pad = 0; pad < PADS; pad++) p.ctl[PADS + pad] = Control{MSG_OFF, 0, 0, 0, 0, 1, 5, 0};
+    } else {
+        customLayer(p, side, 0, 2, 0, 5);
+        for (int L = 1; L < LAYERS; L++) {
+            p.layer[L] = Layer{LAYER_OFF, 0, KEYS_CHROMATIC, 4, 5, 1, 0, 7};
+            for (int pad = 0; pad < PADS; pad++) p.ctl[L * PADS + pad] = Control{MSG_OFF, 0, 0, 0, 0, 1, 5, 0};
+        }
     }
+    uint8_t ch = side == SIDE_LEFT ? 1 : 2;
     for (int b = 0; b < BUTTONS; b++) {
-        Control &x = p.ctl[PADS + b];
-        x.type = MSG_NOTE; x.channel = ch; x.number = (uint8_t)buttonSlot(side, b);
-        x.mode = MODE_MOMENTARY;
+        int slot = buttonSlot(side, b);
+        Control &x = p.ctl[CTL_BUTTON0 + b];
+        if (side == SIDE_LEFT && slot < 4) {
+            x = Control{MSG_ACTION, 0, ACT_LAYER, 0, (uint8_t)slot, 0, 0, 0};
+        } else {
+            x = Control{MSG_NOTE, ch, (uint8_t)slot, MODE_MOMENTARY, 0, 0, 0, 0};
+        }
     }
     for (int k = 0; k < KNOBS; k++) {
         int row, col;
         knobPosition(side, k, row, col);
         int gridCol = (side == SIDE_LEFT ? 0 : 2) + col;
-        Control &x = p.ctl[PADS + BUTTONS + k];
-        x.type = MSG_CC; x.channel = 0; x.number = (uint8_t)(row * 4 + gridCol);
-        x.mode = KNOB_ABS; x.a = 0; x.b = 127; x.c = 1;
+        p.ctl[CTL_KNOB0 + k] = Control{MSG_CC, 0, (uint8_t)(row * 4 + gridCol), KNOB_ABS, 0, 127, 1, 0};
     }
     p.ledMode = LED_BOTH;
+    p.startLayer = 0;
+    p.keys = Keys{0, 0, 3, 1};      // C major, octave 3 (as JAMbo), follow the app
 }
 
 // ------------------------------------------------------------------ velocity

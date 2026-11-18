@@ -14,6 +14,8 @@ static int failures = 0;
 
 struct MockHal : Hal {
     std::vector<std::vector<uint8_t>> out;
+    std::vector<uint8_t> din;
+    void dinOut(const uint8_t *m, int n) override { din.insert(din.end(), m, m + n); }
     std::map<int, std::vector<uint8_t>> store;
     uint32_t rgb[16] = {};
     bool led[10] = {};
@@ -68,8 +70,8 @@ static void testProfileRoundTrip() {
     defaultProfile(p, SIDE_LEFT);
     p.sens.curve = CURVE_CUSTOM;
     p.sens.atMode = AT_POLY;
-    p.ctl[20].type = MSG_CC;
-    p.ctl[20].mode = MODE_TOGGLE;
+    p.ctl[CTL_BUTTON0 + 4].type = MSG_CC;
+    p.ctl[CTL_BUTTON0 + 4].mode = MODE_TOGGLE;
     uint8_t buf[PROFILE_BYTES];
     serializeProfile(p, buf);
     CHECK(deserializeProfile(buf, q));
@@ -99,13 +101,13 @@ static void testDefaults() {
     // knobs: CC = row * 4 + column of the JAMbo 4x4 grid, all 16 numbers used once
     bool used[16] = {};
     for (int k = 0; k < KNOBS; k++) {
-        used[l.ctl[PADS + BUTTONS + k].number] = true;
-        used[r.ctl[PADS + BUTTONS + k].number] = true;
+        used[l.ctl[CTL_KNOB0 + k].number] = true;
+        used[r.ctl[CTL_KNOB0 + k].number] = true;
     }
     for (int i = 0; i < 16; i++) CHECK(used[i]);
     // the left unit's top-left knob is JAMbo's knob 1.1 (CC 0), the right unit's top-right CC 3
-    CHECK(l.ctl[PADS + BUTTONS + knobAt(SIDE_LEFT, 0, 0)].number == 0);
-    CHECK(r.ctl[PADS + BUTTONS + knobAt(SIDE_RIGHT, 0, 1)].number == 3);
+    CHECK(l.ctl[CTL_KNOB0 + knobAt(SIDE_LEFT, 0, 0)].number == 0);
+    CHECK(r.ctl[CTL_KNOB0 + knobAt(SIDE_RIGHT, 0, 1)].number == 3);
     // pads: 36 at the bottom-left as the unit sits
     CHECK(l.ctl[padAt(SIDE_LEFT, 3, 0)].number == 36);
     CHECK(r.ctl[padAt(SIDE_RIGHT, 0, 3)].number == 51);
@@ -166,7 +168,7 @@ static void testKnobs() {
     e.begin(0);
     hal.out.clear();
     int k = 0;
-    const Control &x = e.activeProfile().ctl[PADS + BUTTONS + k];
+    const Control &x = e.activeProfile().ctl[CTL_KNOB0 + k];
     e.knobEvent(k, 1);
     CHECK(hal.last()[0] == (0xB0 | x.channel) && hal.last()[1] == x.number && hal.last()[2] == 1);
     e.knobEvent(k, -5);                             // down to 0
@@ -179,9 +181,9 @@ static void testKnobs() {
     CHECK(hal.last()[2] == 101);
     // relative, offset 64
     Profile p = e.activeProfile();
-    p.ctl[PADS + BUTTONS + k].mode = KNOB_REL64;
-    p.ctl[PADS + BUTTONS + k].c = 2;
-    uint8_t raw[PROFILE_BYTES], packed[400];
+    p.ctl[CTL_KNOB0 + k].mode = KNOB_REL64;
+    p.ctl[CTL_KNOB0 + k].c = 2;
+    uint8_t raw[PROFILE_BYTES], packed[1000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};
@@ -218,7 +220,7 @@ static void testFeedbackLeds() {
     feed(e, {(uint8_t)(0x80 | x.channel), x.number, 0});
     e.tick(0);
     CHECK(hal.rgb[3] == 0);
-    const Control &b = e.activeProfile().ctl[PADS + 7];
+    const Control &b = e.activeProfile().ctl[CTL_BUTTON0 + 7];
     feed(e, {(uint8_t)(0x90 | b.channel), b.number, 127});
     e.tick(0);
     CHECK(hal.led[7]);
@@ -231,7 +233,7 @@ static void testSysex() {
     hal.out.clear();
     feed(e, sysex(CMD_HELLO, {}));
     auto r = hal.last();
-    CHECK(r.size() == 14 && r[4] == (CMD_HELLO | REPLY) && r[5] == ST_OK && r[12] == PROFILES);
+    CHECK(r.size() == 17 && r[4] == (CMD_HELLO | REPLY) && r[5] == ST_OK && r[12] == PROFILES);
     // get -> set the same -> save -> a new engine on the same store reads it back
     feed(e, sysex(CMD_GET_PROFILE, {2}));
     r = hal.last();
@@ -241,7 +243,7 @@ static void testSysex() {
     uint8_t raw[PROFILE_BYTES + 8];
     unpack7(packed.data(), packed.size(), raw);
     raw[1] = 'X';                                                   // rename
-    uint8_t re[400];
+    uint8_t re[1000];
     size_t n = pack7(raw, PROFILE_BYTES, re);
     std::vector<uint8_t> pl = {2};
     pl.insert(pl.end(), re, re + n);
@@ -304,7 +306,7 @@ static void testAftertouch() {
     e.begin(0);
     Profile p = e.activeProfile();
     p.sens.atMode = AT_POLY;
-    uint8_t raw[PROFILE_BYTES], packed[400];
+    uint8_t raw[PROFILE_BYTES], packed[1000];
     serializeProfile(p, raw);
     size_t n = pack7(raw, PROFILE_BYTES, packed);
     std::vector<uint8_t> pl = {0};
@@ -319,6 +321,133 @@ static void testAftertouch() {
     CHECK(sawAt);
     e.padSample(0, 0, t);
     CHECK((hal.out[hal.out.size() - 2][0] & 0xF0) == 0xA0 && hal.out[hal.out.size() - 2][2] == 0);
+}
+
+
+static void testScales() {
+    const int lists[SCALE_COUNT][13] = {
+        {0, 2, 4, 5, 7, 9, 11, -1}, {0, 2, 3, 5, 7, 8, 10, -1}, {0, 2, 3, 5, 7, 9, 10, -1}, {0, 1, 3, 5, 7, 8, 10, -1},
+        {0, 2, 4, 6, 7, 9, 11, -1}, {0, 2, 4, 5, 7, 9, 10, -1}, {0, 1, 3, 5, 6, 8, 10, -1}, {0, 2, 3, 5, 7, 8, 11, -1},
+        {0, 2, 4, 7, 9, -1}, {0, 3, 5, 7, 10, -1}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, -1},
+    };
+    for (int i = 0; i < SCALE_COUNT; i++) {
+        uint16_t m = 0;
+        for (int k = 0; lists[i][k] >= 0; k++) m |= (uint16_t)(1u << lists[i][k]);
+        CHECK(SCALE_MASKS[i] == m);
+    }
+}
+
+static void testKeysNotes() {
+    Layer l = {LAYER_KEYS, 3, KEYS_CHROMATIC, 4, 5, 1, 0, 7};
+    int kind;
+    // C major, octave 3 (as JAMbo: 12 * (3 + 1) + 0 = 48): bottom-left = root
+    CHECK(keysNote(l, 0, SCALE_MASKS[0], 3, 3, 0, kind) == 48 && kind == 2);
+    CHECK(keysNote(l, 0, SCALE_MASKS[0], 3, 3, 1, kind) == 49 && kind == 0);    // C#: outside
+    CHECK(keysNote(l, 0, SCALE_MASKS[0], 3, 3, 2, kind) == 50 && kind == 1);    // D
+    CHECK(keysNote(l, 0, SCALE_MASKS[0], 3, 2, 0, kind) == 52 && kind == 1);    // next row: +4
+    CHECK(keysNote(l, 0, SCALE_MASKS[0], 3, 0, 0, kind) == 60 && kind == 2);    // top row: C again
+    l.layout = KEYS_IN_KEY;
+    // A minor, in key: A C... -> A3 (57) B C D / E F G A ...
+    CHECK(keysNote(l, 9, SCALE_MASKS[1], 3, 3, 0, kind) == 57 && kind == 2);
+    CHECK(keysNote(l, 9, SCALE_MASKS[1], 3, 3, 1, kind) == 59 && kind == 1);
+    CHECK(keysNote(l, 9, SCALE_MASKS[1], 3, 3, 2, kind) == 60);
+    CHECK(keysNote(l, 9, SCALE_MASKS[1], 3, 2, 3, kind) == 69 && kind == 2);    // degree 7: A an octave up
+    CHECK(keysNote(l, 0, SCALE_MASKS[0], 7, 0, 3, kind) == -1 || kind >= 0);    // high octave: stays in range or -1
+}
+
+static void sideLeft(MockHal &hal) {
+    // a stored LEFT device, so the engine starts with the LEFT defaults
+    Device d;
+    defaultDevice(d);
+    d.side = SIDE_LEFT;
+    uint8_t b[DEVICE_BYTES];
+    serializeDevice(d, b);
+    hal.store[STORE_DEVICE].assign(b, b + DEVICE_BYTES);
+}
+
+static void testLayersAndKeys() {
+    MockHal hal;
+    sideLeft(hal);
+    Engine e(hal);
+    e.begin(0);
+    CHECK(e.layer() == 0);
+    // the left unit's top button (slot 0) picks SEQ, slot 1 KEYS
+    int keysBtn = buttonAt(SIDE_LEFT, 1);
+    e.buttonEvent(keysBtn, true, 0);
+    e.buttonEvent(keysBtn, false, 0);
+    CHECK(e.layer() == 1);
+    CHECK(hal.out.back()[4] == EV_LAYER && hal.out.back()[5] == 1);
+    e.tick(0);
+    CHECK(hal.led[keysBtn]);
+    // the app sends A minor, octave 2
+    feed(e, sysex(CMD_SET_SCALE, {9, (uint8_t)(SCALE_MASKS[1] & 0x7F), (uint8_t)(SCALE_MASKS[1] >> 7), 2}));
+    CHECK(e.root() == 9 && e.scaleMask() == SCALE_MASKS[1] && e.octave() == 2);
+    e.tick(0);
+    int bl = padAt(SIDE_LEFT, 3, 0);                    // bottom-left as the unit sits: the root
+    CHECK(hal.rgb[bl] == paletteRgb(5, 127));
+    CHECK(hal.rgb[padAt(SIDE_LEFT, 3, 1)] == paletteRgb(0, 12));     // A#: outside, off
+    hal.out.clear();
+    uint32_t t = 0;
+    for (int k = 0; k < 5; k++) { e.padSample(bl, 900, t); t += 3; }
+    CHECK(hal.out[0][0] == 0x93 && hal.out[0][1] == 12 * 3 + 9);     // KEYS on channel 4: A2 = 45
+    // octave changes while the pad is held: the note off still matches the note on
+    feed(e, sysex(CMD_SET_SCALE, {9, (uint8_t)(SCALE_MASKS[1] & 0x7F), (uint8_t)(SCALE_MASKS[1] >> 7), 4}));
+    e.padSample(bl, 0, t);
+    CHECK(hal.out.back()[0] == 0x83 && hal.out.back()[1] == 45);
+    // MUTE layer (slot 2): notes on channel 5
+    e.buttonEvent(buttonAt(SIDE_LEFT, 2), true, 0);
+    hal.out.clear();
+    for (int k = 0; k < 5; k++) { e.padSample(bl, 900, t); t += 3; }
+    CHECK(hal.out[0][0] == 0x94 && hal.out[0][1] == 36);
+    // host feedback lights the MUTE layer's pad in red
+    feed(e, {0x94, 37, 127});
+    e.padSample(bl, 0, t);
+    e.tick(0);
+    CHECK(hal.rgb[padAt(SIDE_LEFT, 3, 1)] == paletteRgb(2, 127));
+}
+
+static void testFollowHostOff() {
+    MockHal hal;
+    sideLeft(hal);
+    Engine e(hal);
+    e.begin(0);
+    Profile p = e.activeProfile();
+    p.keys.followHost = 0;
+    p.keys.root = 2;
+    uint8_t raw[PROFILE_BYTES], packed[1000];
+    serializeProfile(p, raw);
+    size_t n = pack7(raw, PROFILE_BYTES, packed);
+    std::vector<uint8_t> pl = {0};
+    pl.insert(pl.end(), packed, packed + n);
+    feed(e, sysex(CMD_SET_PROFILE, pl));
+    CHECK(hal.last()[5] == ST_OK);
+    feed(e, sysex(CMD_SET_SCALE, {9, 0x7F, 0x1F, 2}));
+    CHECK(e.root() == 2);
+}
+
+static void testThru() {
+    MockHal hal;
+    Engine e(hal);
+    e.begin(0);
+    CHECK(e.device().thru == THRU_CLOCK);
+    feed(e, {0xFA, 0xF8, 0xF8, 0xFE, 0x90, 60, 100, 0xFC});
+    CHECK((hal.din == std::vector<uint8_t>{0xFA, 0xF8, 0xF8, 0xFC}));
+    hal.din.clear();
+    feed(e, sysex(CMD_SET_MIDI_OUT, {THRU_ALL, 1}));
+    CHECK(hal.last()[5] == ST_OK);
+    feed(e, {0x90, 60, 100, 0xF8, 61, 0});              // running status with a clock in between
+    CHECK((hal.din == std::vector<uint8_t>{0x90, 60, 100, 0xF8, 0x90, 61, 0}));
+    hal.din.clear();
+    feed(e, sysex(CMD_HELLO, {}));                      // our own SysEx does not go out
+    CHECK(hal.din.empty());
+    feed(e, {0xF0, 0x41, 0x10, 0xF7});                  // someone else's does
+    CHECK(hal.din.size() == 4);
+    hal.din.clear();
+    e.knobEvent(0, 1);                                  // the controls' own messages too
+    CHECK(hal.din.size() == 3 && (hal.din[0] & 0xF0) == 0xB0);
+    Engine e2(hal);
+    e2.begin(0);
+    CHECK(e2.device().thru == THRU_ALL && e2.device().controlsOut == 1);
 }
 
 static void writeVectors(const char *path) {
@@ -350,7 +479,19 @@ static void writeVectors(const char *path) {
         for (int i = 0; i < 128; i++) std::fprintf(f, "%s%d", i ? "," : "", lut[i]);
         std::fprintf(f, "]%s\n", c + 1 < CURVE_COUNT ? "," : "");
     }
-    std::fprintf(f, "  ]\n}\n");
+    std::fprintf(f, "  ],\n  \"keys\": [");
+    // [layout, rowStep, root, scale, octave, row, col] -> note, kind
+    bool first = true;
+    for (int layout = 0; layout < 2; layout++)
+        for (int sc = 0; sc < SCALE_COUNT; sc += 3)
+            for (int pad = 0; pad < PADS; pad += 5) {
+                Layer l = {LAYER_KEYS, 0, (uint8_t)layout, (uint8_t)(layout ? 3 : 5), 0, 0, 0, 0};
+                int row = pad / 4, col = pad % 4, kind;
+                int note = keysNote(l, 7, SCALE_MASKS[sc], 2, row, col, kind);
+                std::fprintf(f, "%s[%d,%d,7,%d,2,%d,%d,%d,%d]", first ? "" : ",", layout, l.rowStep, sc, row, col, note, kind);
+                first = false;
+            }
+    std::fprintf(f, "]\n}\n");
     std::fclose(f);
 }
 
@@ -369,6 +510,11 @@ int main(int argc, char **argv) {
     testMonitorAndIdentify();
     testProfileMenu();
     testAftertouch();
+    testScales();
+    testKeysNotes();
+    testLayersAndKeys();
+    testFollowHostOff();
+    testThru();
     if (argc > 1) writeVectors(argv[1]);
     std::printf(failures ? "%d FAILED\n" : "all tests passed\n", failures);
     return failures ? 1 : 0;
