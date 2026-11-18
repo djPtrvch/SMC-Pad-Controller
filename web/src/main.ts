@@ -67,7 +67,7 @@ setInterval(() => {
   }
 }, 250);
 
-window.addEventListener('resize', () => fitText(root));
+window.addEventListener('resize', () => changed());
 
 window.addEventListener('beforeunload', (e) => {
   if (anyUnsaved()) e.preventDefault();

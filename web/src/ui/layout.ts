@@ -9,7 +9,8 @@ import { Unit, app, changed, profileEdited, profileOf, run } from '../state';
 import { field, h, num, segmented, select, toggle } from './dom';
 
 // A unit in the RIGHT orientation (as it comes, checked on the photo): knobs | pads | buttons.
-const W = 780, H = 480, GAP = 40;
+const W = 780, H = 480;
+export const WIDE = '(min-width: 900px) and (orientation: landscape)';     // the same as .units.two in style.css
 interface Rect { x: number; y: number; w: number; h: number }
 
 function rectRight(kind: 'pad' | 'button' | 'knob', i: number): Rect {
@@ -64,8 +65,6 @@ function drawUnit(svg: SVGSVGElement, u: Unit, ox: number, onTap: (u: Unit, ctl:
   const now = performance.now();
   const root = s('g', { transform: `translate(${ox} 0)` });
   root.append(s('rect', { x: 2, y: 2, width: W - 4, height: H - 4, rx: 28, class: 'case' + (app.cur === u.side ? ' cur' : '') }));
-  const label = u.side === Side.LEFT ? 'LEFT' : 'RIGHT';
-  root.append(s('text', { x: W / 2, y: H + 30, class: 'unit-label' }, `${label}${u.dev ? '' : ' · offline'}`));
   const mk = (ctl: number, r: Rect, draw: (g: SVGGElement, flash: boolean) => void) => {
     const sel = app.selected?.side === u.side && app.selected.ctl === ctl;
     const g = s('g', { class: 'ctl' + (sel ? ' sel' : '') });
@@ -140,16 +139,16 @@ function shownUnits(): Unit[] {
   return app.view === 1 ? [left] : app.view === 2 ? [right] : [left, right];
 }
 
-function drawing(): SVGSVGElement {
-  const units = shownUnits();
-  const width = units.length * W + (units.length - 1) * GAP;
-  const svg = s('svg', { viewBox: `0 0 ${width} ${H + 44}`, class: 'unit' });
-  units.forEach((u, i) => drawUnit(svg, u, i * (W + GAP), (uu, ctl) => {
+// one unit: its name and layer tabs above its drawing; on a phone the units stand one above the
+// other (full width), on a wide screen side by side (CSS .units)
+function unitCard(u: Unit): HTMLElement {
+  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'unit' });
+  drawUnit(svg, u, 0, (uu, ctl) => {
     app.selected = { side: uu.side, ctl };
     app.cur = uu.side;
     changed();
-  }));
-  return svg;
+  });
+  return h('div', { class: 'unit-card' + (app.cur === u.side ? ' cur' : '') }, layerTabs(u), svg);
 }
 
 function colorSelect(value: number, onChange: (v: number) => void) {
@@ -251,7 +250,7 @@ function layerEditor(u: Unit): HTMLElement {
 function layerTabs(u: Unit): HTMLElement {
   const p = profileOf(u);
   return h('div', { class: 'layer-tabs' },
-    h('span', { class: 'label' }, u.side === Side.LEFT ? 'LEFT' : 'RIGHT'),
+    h('span', { class: 'unit-name' }, u.side === Side.LEFT ? 'LEFT' : 'RIGHT', u.dev ? null : h('span', { class: 'hint' }, 'offline')),
     ...Array.from({ length: LAYERS }, (_, L) => {
       const t = p.layer[L].type;
       return h('button', {
@@ -263,7 +262,7 @@ function layerTabs(u: Unit): HTMLElement {
           if (u.dev && t !== LAYER_OFF) u.dev.setLayer(L).catch(() => undefined);
           changed();
         },
-      }, `${L + 1} ${t === LAYER_KEYS ? 'KEYS' : t === LAYER_OFF ? '–' : ''}`.trim());
+      }, `LAYER ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`);
     }));
 }
 
@@ -297,13 +296,20 @@ export function layoutPage(): HTMLElement {
     isButton(sel.ctl) ? h('button', { onclick: () => sim.button(sel.ctl - CTL_BUTTON0) }, 'PRESS') : null,
   ) : null;
 
-  return h('div', { class: 'page layout' },
-    tools, help,
-    h('div', { class: 'row layers' }, ...units.map(layerTabs)),
-    h('div', { class: 'unit-box' }, drawing()),
+  const edited = selUnit ?? cur;
+  const editors = [
     simRow,
     sel && selUnit && !showLayer ? controlEditor(selUnit, sel.ctl) : null,
-    layerEditor(selUnit ?? cur),
+    layerEditor(edited),
     field(`LED MODE · ${cur.side === Side.LEFT ? 'LEFT' : 'RIGHT'}`, segmented(LED_MODES, profileOf(cur).ledMode, (v) => { profileOf(cur).ledMode = v; profileEdited(cur); })),
+  ];
+  // units side by side (wide landscape): the editors below both; stacked (phone): right under the unit edited
+  const sideBySide = units.length > 1 && matchMedia(WIDE).matches;
+  const placed = sideBySide
+    ? [h('div', { class: 'units two' }, ...units.map(unitCard)), ...editors]
+    : units.flatMap((u) => [h('div', { class: 'units' }, unitCard(u)), ...(u === edited || units.length === 1 ? editors : [])]);
+  return h('div', { class: 'page layout' },
+    tools, help,
+    ...placed,
   );
 }

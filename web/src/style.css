@@ -55,7 +55,7 @@ svg .flash { stroke: var(--fg) !important; filter: drop-shadow(0 0 8px var(--fg)
 svg text { text-anchor: middle; fill: var(--fg); pointer-events: none; }
 svg .t1 { font-size: 20px; font-weight: 700; }
 svg .t2 { font-size: 14px; fill: var(--dim); }
-svg .t3 { font-size: 9px; font-weight: 700; }
+svg .t3 { font-size: 10px; font-weight: 700; }
 svg .dim { fill: var(--dim); }
 svg .knob + text, svg .knob ~ text { fill: #fff; }
 
@@ -80,14 +80,17 @@ svg .led { pointer-events: none; }
 svg .on-pad { fill: #fff; }
 svg .on-pad.t2 { fill: #bdbdbd; }
 svg .on-pad.ink-dark { fill: #000; }
-.layer-tabs { display: flex; gap: 4px; align-items: center; flex: 1; min-width: 0; }
-.layer-tabs .label { width: 44px; }
+.units { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 900px) and (orientation: landscape) { .units.two { grid-template-columns: 1fr 1fr; } }
+.unit-card { display: flex; flex-direction: column; gap: 8px; }
+.layer-tabs { display: flex; gap: 4px; align-items: center; }
+.unit-name { width: 64px; flex: none; font-size: 13px; font-weight: 800; letter-spacing: .08em; display: flex; flex-direction: column; }
+.unit-name .hint { font-size: 11px; font-weight: 400; letter-spacing: 0; }
+.unit-card.cur .unit-name { color: var(--accent); }
 .layer-tabs button { flex: 1; min-width: 0; padding: 0 4px; font-size: 13px; }
 .layer-tabs button.off { opacity: .5; }
-.row.layers { flex-wrap: nowrap; gap: 16px; }
 .unit-switch { margin-bottom: 4px; }
 input[type=checkbox] { width: 28px; height: 28px; min-height: 0; accent-color: var(--accent); }
-@media (max-width: 700px) { .row.layers { flex-direction: column; gap: 6px; } }
 pre.log { white-space: pre-wrap; font-size: 12px; background: var(--panel2); padding: 10px; border-radius: 8px; margin: 0; }
 
 /* on / off switch (ui-design-notes: a switch, not an ON / OFF button) */
