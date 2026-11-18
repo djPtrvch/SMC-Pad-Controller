@@ -1,0 +1,79 @@
+# Firmware (JieLi toolchain, via open-smc-pad's Boards Manager package) and the web configurator.
+# Every push: host tests, firmware .bin (artifact), web tests and build.
+# main or a manual run: the configurator (with the firmware inside) goes to GitHub Pages.
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  SMCPAD_INDEX: https://github.com/fedepaj/open-smc-pad/releases/download/v0.1.1/package_smcpad_index.json
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: tests/host/run.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vectors
+          path: tests/vectors/vectors.json
+
+  firmware:
+    needs: host-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install the SMC-PAD platform (open-smc-pad v0.1.1)
+        run: |
+          arduino-cli core update-index --additional-urls "$SMCPAD_INDEX"
+          arduino-cli core install smcpad:br25 --additional-urls "$SMCPAD_INDEX"
+      - name: Compile
+        run: |
+          arduino-cli compile --fqbn smcpad:br25:smcpad --warnings default --output-dir build/fw firmware/JamboPad
+          ls -la build/fw
+          mkdir -p dist && cp build/fw/JamboPad.ino.bin dist/jambopad.bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: dist/jambopad.bin
+
+  web:
+    needs: firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: web/public/firmware
+      - name: Test and build
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  pages:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    needs: web
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
