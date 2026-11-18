@@ -45,7 +45,7 @@ export function controlName(u: Unit, ctl: number): string {
 
 function shortMsg(p: Profile, ctl: number): string {
   const x = p.ctl[ctl];
-  if (x.type === MSG_ACTION) return x.number === 0 ? `LAYER ${x.a + 1}` : x.number === 1 ? 'OCTAVE +' : x.number === 2 ? 'OCTAVE −' : 'KEY NOTE';
+  if (x.type === MSG_ACTION) return [`LAYER ${x.a + 1}`, 'OCTAVE +', 'OCTAVE −', 'KEY NOTE', 'BLUETOOTH', `PROFILE ${x.a + 1}`][x.number] ?? '?';
   if (x.type === 0) return '—';
   return `${['', 'N', 'CC', 'PC'][x.type]} ${x.number}`;
 }
@@ -151,10 +151,13 @@ function unitCard(u: Unit): HTMLElement {
   return h('div', { class: 'unit-card' + (app.cur === u.side ? ' cur' : '') }, layerTabs(u), svg);
 }
 
+// the 16 colours a pad can show, as swatches (0 = off)
 function colorSelect(value: number, onChange: (v: number) => void) {
-  const sel = select(PALETTE_NAMES, value, onChange, { class: 'color' });
-  sel.style.borderLeft = `14px solid ${cssColor(paletteRgb(value, 127))}`;
-  return sel;
+  return h('div', { class: 'swatches' }, ...PALETTE_NAMES.map((name, i) => {
+    const b = h('button', { class: 'swatch' + (i === value ? ' on' : '') + (i === 0 ? ' off' : ''), title: name, 'aria-label': name, onclick: () => onChange(i) });
+    if (i) b.style.background = cssColor(paletteRgb(i, 127));
+    return b;
+  }));
 }
 
 const channelSelect = (v: number, on: (v: number) => void) => select(Array.from({ length: 16 }, (_, i) => String(i + 1)), v, on);
@@ -176,6 +179,8 @@ function controlEditor(u: Unit, ctl: number): HTMLElement {
     kids.push(field('ACTION', select(ACTIONS, x.number, (v) => edit(() => { x.number = v; }))));
     if (x.number === 0) kids.push(field('LAYER', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'switches the pads to this layer'));
     if (x.number === 3) kids.push(h('p', { class: 'hint' }, 'Hold the button: the three lower rows of pads are C … B, the key note is lit; tap a pad to pick it. The pad tells the app.'));
+    if (x.number === 4) kids.push(h('p', { class: 'hint' }, 'Switches Bluetooth on and off; the button is lit while it is on.'));
+    if (x.number === 5) kids.push(field('PROFILE', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'a bank of settings: layout, sensitivity, layers'));
   } else if (x.type) {
     kids.push(field('CHANNEL', channelSelect(x.channel, (v) => edit(() => { x.channel = v; }))));
     kids.push(field(x.type === 1 ? 'NOTE' : x.type === 2 ? 'CC NUMBER' : 'PROGRAM', num(x.number, 0, 127, (v) => edit(() => { x.number = v; })),

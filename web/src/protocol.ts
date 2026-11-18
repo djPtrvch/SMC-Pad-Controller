@@ -8,12 +8,13 @@ export const CONTROLS = CTL_KNOB0 + KNOBS;
 export const PROFILES = 4;
 export const NAME_LEN = 12;
 export const PROFILE_BYTES = 743;
-export const DEVICE_BYTES = 5;
+export const DEVICE_BYTES = 6;
 
 export const enum Side { RIGHT = 0, LEFT = 1 }
 export const MSG_TYPES = ['OFF', 'NOTE', 'CC', 'PC'] as const;
 export const MSG_ACTION = 4;
-export const ACTIONS = ['LAYER', 'OCTAVE UP', 'OCTAVE DOWN', 'KEY NOTE (HOLD)'] as const;
+export const ACTIONS = ['LAYER', 'OCTAVE UP', 'OCTAVE DOWN', 'KEY NOTE (HOLD)', 'BLUETOOTH', 'PROFILE (BANK)'] as const;
+export const ACT_LAYER = 0, ACT_ROOT = 3, ACT_BLUETOOTH = 4, ACT_PROFILE = 5;
 export const LAYER_TYPES = ['OFF', 'CUSTOM', 'KEYS'] as const;
 export const LAYER_OFF = 0, LAYER_CUSTOM = 1, LAYER_KEYS = 2;
 export const KEYS_LAYOUTS = ['CHROMATIC', 'IN KEY'] as const;
@@ -337,10 +338,10 @@ export const SYSEX_ID = [0xf0, 0x7d, 0x4a, 0x50];
 export const CMD = {
   HELLO: 0x01, GET_PROFILE: 0x02, SET_PROFILE: 0x03, SAVE: 0x04, SELECT: 0x05, SET_SIDE: 0x06,
   MONITOR: 0x07, SET_RGB: 0x08, BOOTLOADER: 0x09, FACTORY_RESET: 0x0a, IDENTIFY: 0x0b,
-  SET_SCALE: 0x0c, SET_MIDI_OUT: 0x0d, SET_LAYER: 0x0e,
+  SET_SCALE: 0x0c, SET_MIDI_OUT: 0x0d, SET_LAYER: 0x0e, SET_BLUETOOTH: 0x0f,
 } as const;
 export const REPLY = 0x40;
-export const EV = { PRESSURE: 0x60, HIT: 0x61, IDENTIFY: 0x62, PROFILE: 0x63, LAYER: 0x64, ROOT: 0x65 } as const;
+export const EV = { PRESSURE: 0x60, HIT: 0x61, IDENTIFY: 0x62, PROFILE: 0x63, LAYER: 0x64, ROOT: 0x65, BLUETOOTH: 0x66 } as const;
 
 export const sysex = (cmd: number, data: ArrayLike<number> = []) => Uint8Array.from([...SYSEX_ID, cmd, ...Array.from(data), 0xf7]);
 
@@ -350,4 +351,4 @@ export function parseSysex(m: Uint8Array): { cmd: number; data: Uint8Array } | n
   return { cmd: m[4], data: m.slice(5, m.length - 1) };
 }
 
-export interface Hello { fw: string; format: number; side: Side; active: number; profiles: number; thru: number; controlsOut: number; layer: number }
+export interface Hello { fw: string; format: number; side: Side; active: number; profiles: number; thru: number; controlsOut: number; layer: number; ble: number }

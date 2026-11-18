@@ -15,6 +15,7 @@ export class SimDevice implements Link {
   layer = 0;
   thru = 1;
   controlsOut = 0;
+  ble = 1;
   profiles: Profile[];
   host: { root: number; mask: number; octave: number } | null = null;
   private monitorOn = false;
@@ -49,7 +50,7 @@ export class SimDevice implements Link {
     const ok = (extra: number[] = []) => this.out(m.cmd | REPLY, [0, ...extra]);
     const bad = () => this.out(m.cmd | REPLY, [1]);
     switch (m.cmd) {
-      case CMD.HELLO: ok([0, 2, 0, FORMAT_VERSION, this.side, this.active, PROFILES, this.thru, this.controlsOut, this.layer]); break;
+      case CMD.HELLO: ok([0, 4, 0, FORMAT_VERSION, this.side, this.active, PROFILES, this.thru, this.controlsOut, this.layer, this.ble]); break;
       case CMD.GET_PROFILE:
         if (d[0] >= PROFILES) return bad();
         ok([d[0], ...pack7(serializeProfile(this.profiles[d[0]]))]);
@@ -81,6 +82,7 @@ export class SimDevice implements Link {
       case CMD.BOOTLOADER: ok(); break;
       case CMD.SET_SCALE: this.host = { root: d[0] % 12, mask: d[1] | (d[2] << 7), octave: d[3] }; break;
       case CMD.SET_MIDI_OUT: this.thru = d[0]; this.controlsOut = d[1]; ok(); break;
+      case CMD.SET_BLUETOOTH: this.ble = d[0] ? 1 : 0; ok(); break;
       case CMD.SET_LAYER:
         if (d[0] >= LAYERS || this.profiles[this.active].layer[d[0]].type === LAYER_OFF) return bad();
         this.layer = d[0];

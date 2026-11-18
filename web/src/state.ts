@@ -115,6 +115,10 @@ export async function attach(dev: Device, sim: SimDevice | null) {
       u.layer = e.index;
       changed();
     }
+    if (e.kind === 'bluetooth' && u.hello) {
+      u.hello.ble = e.on ? 1 : 0;
+      changed();
+    }
     deviceListeners.forEach((l) => l(u, e));
   });
 }

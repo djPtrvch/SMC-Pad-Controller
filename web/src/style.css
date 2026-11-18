@@ -103,3 +103,10 @@ pre.log { white-space: pre-wrap; font-size: 12px; background: var(--panel2); pad
 .switch.on .knob { left: 22px; }
 button { white-space: nowrap; overflow: hidden; }
 svg .small { font-size: 11px; }
+
+/* colour swatches: 8 x 2, tap to pick */
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
+.swatch { min-height: 34px; padding: 0; border-radius: 8px; border: 2px solid transparent; }
+.swatch.off { background: #111 linear-gradient(135deg, transparent 46%, #666 46%, #666 54%, transparent 54%); }
+.swatch.on { border-color: var(--fg); box-shadow: 0 0 0 2px var(--bg) inset; }
+.editor .field:has(.swatches) { grid-column: 1 / -1; }

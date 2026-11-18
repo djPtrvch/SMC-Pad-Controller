@@ -16,6 +16,7 @@ export type DeviceEvent =
   | { kind: 'identify'; control: 'pad' | 'button' | 'knob'; index: number; value: number }
   | { kind: 'profile'; index: number }
   | { kind: 'layer'; index: number }
+  | { kind: 'bluetooth'; on: boolean }
   | { kind: 'midi'; bytes: Uint8Array };
 
 export class DeviceError extends Error {}
@@ -57,6 +58,9 @@ export class Device {
       case EV.LAYER:
         this.emit({ kind: 'layer', index: d[0] });
         return;
+      case EV.BLUETOOTH:
+        this.emit({ kind: 'bluetooth', on: d[0] !== 0 });
+        return;
     }
     if (m.cmd & REPLY) {
       const w = this.waiting.get(m.cmd & ~REPLY);
@@ -91,7 +95,7 @@ export class Device {
   async hello(): Promise<Hello> {
     const d = await this.request(CMD.HELLO, [], 800);
     if (d[3] !== FORMAT_VERSION) throw new DeviceError(`the pad has firmware ${d[0]}.${d[1]}.${d[2]} (format ${d[3]}): update it (DEVICE → FIRMWARE)`);
-    return { fw: `${d[0]}.${d[1]}.${d[2]}`, format: d[3], side: d[4] as Side, active: d[5], profiles: d[6], thru: d[7], controlsOut: d[8], layer: d[9] };
+    return { fw: `${d[0]}.${d[1]}.${d[2]}`, format: d[3], side: d[4] as Side, active: d[5], profiles: d[6], thru: d[7], controlsOut: d[8], layer: d[9], ble: d[10] ?? 0 };
   }
 
   async getProfile(i: number): Promise<Profile> {
@@ -115,6 +119,7 @@ export class Device {
   factoryReset = () => this.request(CMD.FACTORY_RESET, [], 4000).then(() => undefined);
   bootloader = () => this.request(CMD.BOOTLOADER, [], 1500).then(() => undefined);
   setMidiOut = (thru: number, controlsOut: number) => this.request(CMD.SET_MIDI_OUT, [thru, controlsOut]).then(() => undefined);
+  setBluetooth = (on: boolean) => this.request(CMD.SET_BLUETOOTH, [on ? 1 : 0]).then(() => undefined);
   setLayer = (l: number) => this.request(CMD.SET_LAYER, [l]).then(() => undefined);
   setScale(root: number, mask: number, octave: number) {
     this.link.send(sysex(CMD.SET_SCALE, [root, mask & 127, (mask >> 7) & 31, octave]));
@@ -170,5 +175,46 @@ export function midiLink(pair: PortPair): Link {
   pair.input.onmidimessage = (e: MIDIMessageEvent) => {
     if (e.data && link.onMessage) link.onMessage(new Uint8Array(e.data));
   };
+  return link;
+}
+
+// ------------------------------------------------------------------ Bluetooth (Web Bluetooth)
+// The pad's settings service carries the same SysEx as USB, in 20-byte pieces (firmware: JamboPad.ino).
+
+export const BLE_SERVICE = '4a50c0f1-0b1e-4d1a-9a7d-7d4a50000001';
+export const BLE_CHAR = '4a50c0f1-0b1e-4d1a-9a7d-7d4a50000002';
+export const bluetoothSupported = () => typeof navigator !== 'undefined' && 'bluetooth' in navigator;
+
+export async function bluetoothLink(): Promise<Link> {
+  const dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'JAMboPAD' }], optionalServices: [BLE_SERVICE] });
+  const server = await dev.gatt!.connect();
+  const ch = await (await server.getPrimaryService(BLE_SERVICE)).getCharacteristic(BLE_CHAR);
+  let buf: number[] = [];
+  const link: Link = {
+    name: dev.name ?? 'JAMboPAD (Bluetooth)',
+    onMessage: null,
+    send: (b) => {
+      // one write at a time, in order
+      for (let i = 0; i < b.length; i += 20) {
+        const piece = b.slice(i, i + 20);
+        queue = queue.then(() => ch.writeValueWithoutResponse(piece)).catch(() => undefined);
+      }
+    },
+    close: () => { try { dev.gatt?.disconnect(); } catch { /* gone */ } },
+  };
+  let queue: Promise<unknown> = Promise.resolve();
+  ch.addEventListener('characteristicvaluechanged', () => {
+    const v = ch.value!;
+    for (let i = 0; i < v.byteLength; i++) {
+      const x = v.getUint8(i);
+      if (x === 0xf0) buf = [];
+      buf.push(x);
+      if (x === 0xf7) {
+        if (buf[0] === 0xf0) link.onMessage?.(Uint8Array.from(buf));
+        buf = [];
+      }
+    }
+  });
+  await ch.startNotifications();
   return link;
 }

@@ -1,5 +1,5 @@
 // DEVICE: connect the pads (Web MIDI) or virtual ones, each unit's side and MIDI OUT, firmware.
-import { Device, DeviceError, midiLink, midiPorts, midiSupported, usbSupported } from '../device';
+import { Device, DeviceError, bluetoothLink, bluetoothSupported, midiLink, midiPorts, midiSupported, usbSupported } from '../device';
 import { DfuDevice } from '../dfu';
 import { PROFILES, Side, THRU_MODES } from '../protocol';
 import { SimDevice } from '../sim';
@@ -98,6 +98,13 @@ function unitCard(u: Unit): HTMLElement {
         moved.unsaved = false;
       }
     })), 'LEFT: turned by 180°, to the left of the other unit'),
+    toggle('BLUETOOTH', !!hello.ble, (v) => {
+      if (!v && u.dev!.link.name.startsWith('JAMboPAD') && !confirm('This connection is Bluetooth: switching it off disconnects. Go on?')) return;
+      run('bluetooth', async () => {
+        await u.dev!.setBluetooth(v);
+        hello.ble = v ? 1 : 0;
+      });
+    }, 'Bluetooth MIDI and settings without a cable; off saves the battery'),
     h('h3', {}, 'MIDI OUT (3.5 mm)'),
     field('FROM THE APP', segmented(THRU_MODES, hello.thru, (v) => run('midi out', async () => {
       await u.dev!.setMidiOut(v, hello.controlsOut);
@@ -126,6 +133,19 @@ export function devicePage(): HTMLElement {
     h('div', { class: 'row' },
       h('button', { disabled: !midiSupported(), onclick: () => run('scan', scan) }, 'FIND PADS'),
       h('button', {
+        disabled: !bluetoothSupported(),
+        onclick: () => run('bluetooth', async () => {
+          const link = await bluetoothLink();
+          const dev = new Device(link);
+          try {
+            await attach(dev, null);
+          } catch (e) {
+            dev.close();
+            throw e;
+          }
+        }),
+      }, 'BLUETOOTH'),
+      h('button', {
         onclick: () => run('virtual', async () => {
           for (const side of [Side.LEFT, Side.RIGHT]) {
             if (app.units[side].dev) continue;
@@ -135,7 +155,7 @@ export function devicePage(): HTMLElement {
         }),
       }, 'VIRTUAL PADS'),
     ),
-    h('p', { class: 'hint' }, 'Both pads at once: a USB-C hub with power between the phone and the pads.'),
+    h('p', { class: 'hint' }, 'FIND PADS: USB cable (both pads at once: a USB-C hub with power). BLUETOOTH: settings without a cable; the firmware is written over USB only.'),
     ui.scanned && !free.length ? h('p', { class: 'hint' }, 'No other MIDI devices. Plug a pad in and tap FIND PADS again.') : null,
     ...free.map((n) => h('button', { class: 'port', onclick: () => run('connect', () => connect(n)) }, n)),
   );
