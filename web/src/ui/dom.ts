@@ -42,8 +42,6 @@ export function segmented(options: readonly string[], value: number, onChange: (
   return h('div', { class: 'seg' }, ...options.map((o, i) => h('button', { class: i === value ? 'on' : '', onclick: () => onChange(i) }, o)));
 }
 
-export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-export const noteName = (n: number) => NOTE_NAMES[n % 12] + (Math.floor(n / 12) - 2);   // 60 = C3, as in JAMbo
 
 export function download(name: string, data: BlobPart, type = 'application/json') {
   const url = URL.createObjectURL(new Blob([data], { type }));

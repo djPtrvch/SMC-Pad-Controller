@@ -1,6 +1,6 @@
 // Talking to a JamboPad: over Web MIDI (Chrome on Android or a computer) or to the virtual device.
 import {
-  CMD, EV, Hello, PROFILE_BYTES, Profile, REPLY, Side, deserializeProfile, pack7, packedSize, parseSysex, serializeProfile, sysex, unpack7,
+  CMD, EV, FORMAT_VERSION, Hello, PROFILE_BYTES, Profile, REPLY, Side, deserializeProfile, pack7, packedSize, parseSysex, serializeProfile, sysex, unpack7,
 } from './protocol';
 
 export interface Link {
@@ -15,6 +15,7 @@ export type DeviceEvent =
   | { kind: 'hit'; pad: number; peak: number; linear: number; velocity: number }
   | { kind: 'identify'; control: 'pad' | 'button' | 'knob'; index: number; value: number }
   | { kind: 'profile'; index: number }
+  | { kind: 'layer'; index: number }
   | { kind: 'midi'; bytes: Uint8Array };
 
 export class DeviceError extends Error {}
@@ -53,6 +54,9 @@ export class Device {
       case EV.PROFILE:
         this.emit({ kind: 'profile', index: d[0] });
         return;
+      case EV.LAYER:
+        this.emit({ kind: 'layer', index: d[0] });
+        return;
     }
     if (m.cmd & REPLY) {
       const w = this.waiting.get(m.cmd & ~REPLY);
@@ -86,7 +90,8 @@ export class Device {
 
   async hello(): Promise<Hello> {
     const d = await this.request(CMD.HELLO, [], 800);
-    return { fw: `${d[0]}.${d[1]}.${d[2]}`, format: d[3], side: d[4] as Side, active: d[5], profiles: d[6] };
+    if (d[3] !== FORMAT_VERSION) throw new DeviceError(`the pad has firmware ${d[0]}.${d[1]}.${d[2]} (format ${d[3]}): update it (DEVICE → FIRMWARE)`);
+    return { fw: `${d[0]}.${d[1]}.${d[2]}`, format: d[3], side: d[4] as Side, active: d[5], profiles: d[6], thru: d[7], controlsOut: d[8], layer: d[9] };
   }
 
   async getProfile(i: number): Promise<Profile> {
@@ -109,6 +114,11 @@ export class Device {
   identify = (on: boolean) => this.request(CMD.IDENTIFY, [on ? 1 : 0]).then(() => undefined);
   factoryReset = () => this.request(CMD.FACTORY_RESET, [], 4000).then(() => undefined);
   bootloader = () => this.request(CMD.BOOTLOADER, [], 1500).then(() => undefined);
+  setMidiOut = (thru: number, controlsOut: number) => this.request(CMD.SET_MIDI_OUT, [thru, controlsOut]).then(() => undefined);
+  setLayer = (l: number) => this.request(CMD.SET_LAYER, [l]).then(() => undefined);
+  setScale(root: number, mask: number, octave: number) {
+    this.link.send(sysex(CMD.SET_SCALE, [root, mask & 127, (mask >> 7) & 31, octave]));
+  }
   setRgb(pad: number, rgb: number) {
     this.link.send(sysex(CMD.SET_RGB, [pad, (rgb >> 17) & 127, (rgb >> 9) & 127, (rgb >> 1) & 127]));
   }

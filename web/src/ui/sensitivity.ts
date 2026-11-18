@@ -1,8 +1,9 @@
 // SENSITIVITY: velocity curve, thresholds, aftertouch, per-pad gain with live pressure.
 import { DeviceEvent } from '../device';
 import { AT_MODES, CURVES, CURVE_CUSTOM, CURVE_FIXED, PADS, padAt, velocityLut } from '../protocol';
-import { app, deviceListeners, editingProfile, profileEdited, side } from '../state';
+import { Unit, app, deviceListeners, profileEdited, profileOf, unit } from '../state';
 import { field, h, num, segmented } from './dom';
+import { unitSwitch } from './unitswitch';
 
 const live = {
   raw: new Array(PADS).fill(0) as number[],
@@ -14,7 +15,8 @@ const live = {
 
 let redrawLive: (() => void) | null = null;
 
-deviceListeners.add((e: DeviceEvent) => {
+deviceListeners.add((u: Unit, e: DeviceEvent) => {
+  if (u.side !== app.cur) return;
   if (e.kind === 'pressure') live.raw = e.raw;
   if (e.kind === 'hit') {
     live.hits.unshift(e);
@@ -26,7 +28,7 @@ deviceListeners.add((e: DeviceEvent) => {
 
 // the curve: input = linear velocity from the peak, output = the velocity sent
 function curveCanvas(): HTMLCanvasElement {
-  const p = editingProfile();
+  const p = profileOf(unit());
   const cv = h('canvas', { class: 'curve', width: 600, height: 600 });
   const pad = 40, size = 600 - 2 * pad;
   const X = (v: number) => pad + ((v - 1) / 126) * size;
@@ -82,7 +84,7 @@ function curveCanvas(): HTMLCanvasElement {
     draw();
   });
   cv.addEventListener('pointerup', () => {
-    if (dragging >= 0) { dragging = -1; profileEdited(); }
+    if (dragging >= 0) { dragging = -1; profileEdited(unit()); }
   });
   redrawCurve = draw;
   return cv;
@@ -90,11 +92,11 @@ function curveCanvas(): HTMLCanvasElement {
 let redrawCurve: (() => void) | null = null;
 
 function meters(): HTMLElement {
-  const p = editingProfile();
+  const p = profileOf(unit());
   const box = h('div', { class: 'meters' });
   const draw = () => {
     box.replaceChildren();
-    const sd = side();
+    const sd = app.cur;
     for (let row = 0; row < 4; row++) for (let col = 0; col < 4; col++) {
       const pad = padAt(sd, row, col);
       const raw = live.raw[pad] ?? 0;
@@ -117,19 +119,19 @@ function hitRows() {
 
 const gainBox = h('div');
 function gainField() {
-  const p = editingProfile();
+  const p = profileOf(unit());
   return field(`GAIN · PAD ${live.gainPad + 1}`, h('input', {
     type: 'range', min: 50, max: 200, value: p.sens.padGain[live.gainPad],
-    onchange: (e: Event) => { p.sens.padGain[live.gainPad] = Number((e.target as HTMLInputElement).value); profileEdited(); },
+    onchange: (e: Event) => { p.sens.padGain[live.gainPad] = Number((e.target as HTMLInputElement).value); profileEdited(unit()); },
   }), 'tap a pad above to pick it');
 }
 
 function calibration(): HTMLElement {
-  const p = editingProfile();
+  const p = profileOf(unit());
   if (!live.calibrating) {
     return h('button', {
-      disabled: !app.dev,
-      onclick: () => { live.calibrating = true; live.calPeaks.fill(0); profileEdited(); },
+      disabled: !unit().dev,
+      onclick: () => { live.calibrating = true; live.calPeaks.fill(0); profileEdited(unit()); },
     }, 'AUTO CALIBRATE');
   }
   return h('div', { class: 'row' },
@@ -142,16 +144,16 @@ function calibration(): HTMLElement {
           // every pad's hardest hit reaches the full scale
           for (const [peak, i] of hitPads) p.sens.padGain[i] = Math.max(50, Math.min(200, Math.round((p.sens.fullScale * 100) / peak)));
         }
-        profileEdited();
+        profileEdited(unit());
       },
     }, 'FINISH'),
-    h('button', { onclick: () => { live.calibrating = false; profileEdited(); } }, 'CANCEL'));
+    h('button', { onclick: () => { live.calibrating = false; profileEdited(unit()); } }, 'CANCEL'));
 }
 
 export function sensitivityPage(): HTMLElement {
-  const p = editingProfile();
+  const p = profileOf(unit());
   const s = p.sens;
-  const edit = (fn: () => void) => { fn(); profileEdited(); };
+  const edit = (fn: () => void) => { fn(); profileEdited(unit()); };
 
   gainBox.replaceChildren(gainField());
   hitsBox.replaceChildren(...hitRows());
@@ -176,7 +178,7 @@ export function sensitivityPage(): HTMLElement {
       field('FULL SCALE', num(s.fullScale, 40, 1023, (v) => edit(() => { s.fullScale = v; })), 'peak for velocity 127'),
       field('ATTACK', num(s.attackMs, 1, 40, (v) => edit(() => { s.attackMs = v; })), 'ms to find the peak'),
     ),
-    app.dev ? meters() : h('p', { class: 'hint' }, 'Connect a device to see live pressure.'),
+    unit().dev ? meters() : h('p', { class: 'hint' }, 'Connect a device to see live pressure.'),
     gainBox,
     calibration(),
     hitsBox,
@@ -191,10 +193,10 @@ export function sensitivityPage(): HTMLElement {
     ) : null,
   );
 
-  return h('div', { class: 'page' }, curve, detection, at);
+  return h('div', { class: 'page' }, unitSwitch(), curve, detection, at);
 }
 
 export function enterSensitivity(on: boolean) {
   if (!on) { redrawLive = null; redrawCurve = null; }
-  if (app.dev) app.dev.monitor(on).catch(() => undefined);
+  for (const u of app.units) u.dev?.monitor(on).catch(() => undefined);
 }

@@ -1,5 +1,5 @@
 // JamboPad configurator: tabs, header with SAVE, status line.
-import { Tab, app, changed, onChange, run } from './state';
+import { Tab, anyUnsaved, app, changed, onChange, run } from './state';
 import { h } from './ui/dom';
 import { devicePage } from './ui/devicepage';
 import { layoutPage } from './ui/layout';
@@ -17,16 +17,18 @@ function setTab(t: Tab) {
 }
 
 function header(): HTMLElement {
-  const profile = app.profiles[app.editing];
+  const status = app.units.slice().reverse().map((u) => `${u.side ? 'L' : 'R'}: ${u.dev ? `P${u.editing + 1} “${u.profiles[u.editing].name}”` : 'offline'}`).join(' · ');
+  const unsaved = anyUnsaved();
   return h('header', {},
     h('div', { class: 'brand' }, 'JAMBOPAD'),
-    h('div', { class: 'status' },
-      app.dev ? `${app.dev.link.name} · editing ${app.editing + 1} “${profile.name}”` : 'not connected'),
-    app.dev ? h('button', {
-      class: app.unsaved ? 'primary' : '',
-      disabled: !app.unsaved,
-      onclick: () => run('save', async () => { await app.dev!.save(); app.unsaved = false; }),
-    }, app.unsaved ? 'SAVE' : 'SAVED') : null,
+    h('div', { class: 'status' }, status),
+    app.units.some((u) => u.dev) ? h('button', {
+      class: unsaved ? 'primary' : '',
+      disabled: !unsaved,
+      onclick: () => run('save', async () => {
+        for (const u of app.units) if (u.dev && u.unsaved) { await u.dev.save(); u.unsaved = false; }
+      }),
+    }, unsaved ? 'SAVE' : 'SAVED') : null,
   );
 }
 
@@ -65,7 +67,7 @@ setInterval(() => {
 }, 250);
 
 window.addEventListener('beforeunload', (e) => {
-  if (app.unsaved) e.preventDefault();
+  if (anyUnsaved()) e.preventDefault();
 });
 
 render();

@@ -1,46 +1,52 @@
-// LAYOUT: the unit drawn as it sits on the desk; tap a control to edit what it sends.
+// LAYOUT: both units as they sit side by side (the left one turned by 180°), pad layers,
+// and the editors of a control, a layer and the KEYS scale.
 import {
-  BUTTONS, BUTTON_MODES, BUTTON_NAMES, CONTROLS, KNOB_MODES, LED_MODES, MSG_TYPES, PADS, PALETTE_NAMES, Side,
-  cssColor, isButton, isKnob, knobPosition, padAt, padPosition, paletteRgb,
+  ACTIONS, BUTTONS, BUTTON_MODES, BUTTON_NAMES, CTL_BUTTON0, CTL_KNOB0, KEYS_LAYOUTS, KNOB_MODES, LAYERS, LAYER_KEYS, LAYER_OFF,
+  LAYER_TYPES, LED_MODES, MSG_ACTION, MSG_TYPES, NOTE_NAMES, PADS, PALETTE_NAMES, Profile, SCALES, Side, cssColor, isButton, isKnob,
+  isPad, keysNote, knobPosition, noteName, padAt, padPosition, paletteRgb,
 } from '../protocol';
-import { app, changed, editingProfile, profileEdited, run, side } from '../state';
-import { field, h, noteName, num, segmented, select } from './dom';
+import { Unit, app, changed, profileEdited, profileOf, run } from '../state';
+import { field, h, num, segmented, select } from './dom';
 
-// Geometry of a unit in the RIGHT orientation (as it comes): knobs | pads | buttons.
-// LEFT is the same turned by 180 degrees. Check against the device with IDENTIFY.
-const W = 780, H = 480;
+// A unit in the RIGHT orientation (as it comes, checked on the photo): knobs | pads | buttons.
+const W = 780, H = 480, GAP = 40;
 interface Rect { x: number; y: number; w: number; h: number }
 
-function rectRight(ctl: number): Rect {
-  if (ctl < PADS) {
-    const [row, col] = padPosition(Side.RIGHT, ctl);
+function rectRight(kind: 'pad' | 'button' | 'knob', i: number): Rect {
+  if (kind === 'pad') {
+    const [row, col] = padPosition(Side.RIGHT, i);
     return { x: 240 + col * 110, y: 20 + row * 110, w: 100, h: 100 };
   }
-  if (isButton(ctl)) return { x: 700, y: 20 + (ctl - PADS) * 44, w: 62, h: 38 };
-  const [row, col] = knobPosition(Side.RIGHT, ctl - PADS - BUTTONS);
+  if (kind === 'button') return { x: 700, y: 20 + i * 44, w: 62, h: 38 };
+  const [row, col] = knobPosition(Side.RIGHT, i);
   return { x: 30 + col * 100, y: 30 + row * 110, w: 80, h: 80 };
 }
 
-export function controlRect(s: Side, ctl: number): Rect {
-  const r = rectRight(ctl);
-  return s === Side.LEFT ? { x: W - r.x - r.w, y: H - r.y - r.h, w: r.w, h: r.h } : r;
+function rectOf(side: Side, kind: 'pad' | 'button' | 'knob', i: number): Rect {
+  const r = rectRight(kind, i);
+  return side === Side.LEFT ? { x: W - r.x - r.w, y: H - r.y - r.h, w: r.w, h: r.h } : r;
 }
 
-export function controlName(ctl: number): string {
-  if (ctl < PADS) {
-    const [row, col] = padPosition(side(), ctl);
-    return `PAD · row ${row + 1}, column ${col + 1}`;
+function keysState(p: Profile) {
+  return { root: p.keys.root, mask: SCALES[p.keys.scale].mask, octave: p.keys.octave };
+}
+
+export function controlName(u: Unit, ctl: number): string {
+  const unitName = u.side === Side.LEFT ? 'LEFT' : 'RIGHT';
+  if (isPad(ctl)) {
+    const [row, col] = padPosition(u.side, ctl % PADS);
+    return `${unitName} · LAYER ${Math.floor(ctl / PADS) + 1} · PAD row ${row + 1}, column ${col + 1}`;
   }
-  if (isButton(ctl)) return `BUTTON ${BUTTON_NAMES[ctl - PADS]}`;
-  const [row, col] = knobPosition(side(), ctl - PADS - BUTTONS);
-  return `KNOB · row ${row + 1}, column ${col + 1}`;
+  if (isButton(ctl)) return `${unitName} · BUTTON ${BUTTON_NAMES[ctl - CTL_BUTTON0]}`;
+  const [row, col] = knobPosition(u.side, ctl - CTL_KNOB0);
+  return `${unitName} · KNOB row ${row + 1}, column ${col + 1}`;
 }
 
-function shortMsg(ctl: number): string {
-  const x = editingProfile().ctl[ctl];
+function shortMsg(p: Profile, ctl: number): string {
+  const x = p.ctl[ctl];
+  if (x.type === MSG_ACTION) return x.number === 0 ? `LAYER ${x.a + 1}` : x.number === 1 ? 'OCT +' : 'OCT −';
   if (x.type === 0) return '—';
-  const t = ['', 'N', 'CC', 'PC'][x.type];
-  return `${t} ${x.number}`;
+  return `${['', 'N', 'CC', 'PC'][x.type]} ${x.number}`;
 }
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -51,36 +57,98 @@ function s<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, s
   return el;
 }
 
-export function drawUnit(onTap: (ctl: number, e: PointerEvent) => void): SVGSVGElement {
-  const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, class: 'unit' });
-  svg.append(s('rect', { x: 2, y: 2, width: W - 4, height: H - 4, rx: 28, class: 'case' }));
-  const p = editingProfile();
-  const sd = side();
+function drawUnit(svg: SVGSVGElement, u: Unit, ox: number, onTap: (u: Unit, ctl: number) => void) {
+  const p = profileOf(u);
+  const L = u.layer;
+  const layer = p.layer[L];
   const now = performance.now();
-  for (let c = 0; c < CONTROLS; c++) {
-    const r = controlRect(sd, c);
-    const g = s('g', { class: 'ctl' + (app.selected === c ? ' sel' : ''), 'data-ctl': c });
-    const flash = now - (app.flash.get(c) ?? -1e9) < 600;
-    const x = p.ctl[c];
-    if (c < PADS) {
-      const fill = x.a ? cssColor(paletteRgb(x.a, 50)) : 'var(--pad)';
-      g.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'pad' + (flash ? ' flash' : ''), fill }));
-      g.append(s('text', { x: r.x + r.w / 2, y: r.y + r.h / 2 - 4, class: 't1' }, shortMsg(c)));
-      g.append(s('text', { x: r.x + r.w / 2, y: r.y + r.h / 2 + 18, class: 't2' }, x.type ? `ch ${x.channel + 1}${x.mode ? ' · T' : ''}` : ''));
-      g.append(s('rect', { x: r.x + 8, y: r.y + r.h - 14, width: 22, height: 6, rx: 3, fill: cssColor(paletteRgb(x.c || 0, 127)), class: 'chip' }));
-    } else if (isButton(c)) {
-      g.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 6, class: 'btn' + (flash ? ' flash' : '') }));
-      g.append(s('text', { x: r.x + r.w / 2, y: r.y + 15, class: 't3' }, BUTTON_NAMES[c - PADS]));
-      g.append(s('text', { x: r.x + r.w / 2, y: r.y + 31, class: 't3 dim' }, shortMsg(c)));
-    } else {
+  const root = s('g', { transform: `translate(${ox} 0)` });
+  root.append(s('rect', { x: 2, y: 2, width: W - 4, height: H - 4, rx: 28, class: 'case' + (app.cur === u.side ? ' cur' : '') }));
+  const label = u.side === Side.LEFT ? 'LEFT' : 'RIGHT';
+  root.append(s('text', { x: W / 2, y: H + 30, class: 'unit-label' }, `${label}${u.dev ? '' : ' · offline'}`));
+  const mk = (ctl: number, r: Rect, draw: (g: SVGGElement, flash: boolean) => void) => {
+    const sel = app.selected?.side === u.side && app.selected.ctl === ctl;
+    const g = s('g', { class: 'ctl' + (sel ? ' sel' : '') });
+    draw(g, now - (app.flash.get(`${u.side}:${ctl}`) ?? -1e9) < 600);
+    g.addEventListener('pointerdown', () => onTap(u, ctl));
+    root.append(g);
+    void r;
+  };
+  const ks = keysState(p);
+  for (let pad = 0; pad < PADS; pad++) {
+    const r = rectOf(u.side, 'pad', pad);
+    const ctl = L * PADS + pad;
+    mk(ctl, r, (g, flash) => {
+      // a pad as its LED shows it: dark when off, its colour (brightness = level) when lit
+      let color = 0, level = 0, t1 = '', t2 = '';
+      if (layer.type === LAYER_KEYS) {
+        const [row, col] = padPosition(u.side, pad);
+        const { note, kind } = keysNote(layer, ks.root, ks.mask, ks.octave, row, col);
+        if (note >= 0) {
+          color = kind === 2 ? layer.rootColor : kind === 1 ? layer.scaleColor : layer.outColor;
+          level = kind === 2 ? 127 : kind === 1 ? 60 : 25;
+        }
+        t1 = note >= 0 ? noteName(note) : '';
+        t2 = kind === 2 ? 'root' : '';
+      } else {
+        const x = p.ctl[ctl];
+        color = x.a;
+        level = 40;
+        t1 = shortMsg(p, ctl);
+        t2 = x.type ? `ch ${x.channel + 1}${x.mode ? ' · T' : ''}` : '';
+      }
+      g.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, class: 'pad' + (flash ? ' flash' : '') }));
+      const rgb = color ? paletteRgb(color, 127) : 0;
+      const alpha = color ? 0.2 + 0.8 * (level / 127) : 0;
+      if (color) g.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 10, fill: cssColor(rgb), 'fill-opacity': alpha.toFixed(2), class: 'led' }));
+      const lum = (((rgb >> 16) & 255) * 0.3 + ((rgb >> 8) & 255) * 0.59 + (rgb & 255) * 0.11) * alpha;
+      const ink = lum > 140 ? ' ink-dark' : '';
+      g.append(s('text', { x: r.x + r.w / 2, y: r.y + r.h / 2 - 4, class: 't1 on-pad' + ink }, t1));
+      g.append(s('text', { x: r.x + r.w / 2, y: r.y + r.h / 2 + 18, class: 't2 on-pad' + ink }, t2));
+      if (layer.type !== LAYER_KEYS && p.ctl[ctl].type) {
+        g.append(s('rect', { x: r.x + 8, y: r.y + r.h - 14, width: 22, height: 6, rx: 3, fill: cssColor(paletteRgb(p.ctl[ctl].c, 127)) }));
+      }
+    });
+  }
+  for (let b = 0; b < BUTTONS; b++) {
+    const r = rectOf(u.side, 'button', b);
+    const ctl = CTL_BUTTON0 + b;
+    const x = p.ctl[ctl];
+    const lit = x.type === MSG_ACTION && x.number === 0 && x.a === L;
+    mk(ctl, r, (g, flash) => {
+      g.append(s('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 6, class: 'btn' + (flash ? ' flash' : '') + (lit ? ' lit' : '') }));
+      g.append(s('text', { x: r.x + r.w / 2, y: r.y + 15, class: 't3' }, BUTTON_NAMES[b]));
+      g.append(s('text', { x: r.x + r.w / 2, y: r.y + 31, class: 't3 dim' }, shortMsg(p, ctl)));
+    });
+  }
+  for (let k = 0; k < 8; k++) {
+    const r = rectOf(u.side, 'knob', k);
+    const ctl = CTL_KNOB0 + k;
+    const x = p.ctl[ctl];
+    mk(ctl, r, (g, flash) => {
       const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
       g.append(s('circle', { cx, cy, r: r.w / 2, class: 'knob' + (flash ? ' flash' : '') }));
-      g.append(s('text', { x: cx, y: cy - 2, class: 't1' }, shortMsg(c)));
+      g.append(s('text', { x: cx, y: cy - 2, class: 't1 light' }, shortMsg(p, ctl)));
       g.append(s('text', { x: cx, y: cy + 18, class: 't2' }, x.type ? (x.mode ? 'REL' : 'ABS') : ''));
-    }
-    g.addEventListener('pointerdown', (e) => onTap(c, e));
-    svg.append(g);
+    });
   }
+  svg.append(root);
+}
+
+function shownUnits(): Unit[] {
+  const [right, left] = app.units;
+  return app.view === 1 ? [left] : app.view === 2 ? [right] : [left, right];
+}
+
+function drawing(): SVGSVGElement {
+  const units = shownUnits();
+  const width = units.length * W + (units.length - 1) * GAP;
+  const svg = s('svg', { viewBox: `0 0 ${width} ${H + 44}`, class: 'unit' });
+  units.forEach((u, i) => drawUnit(svg, u, i * (W + GAP), (uu, ctl) => {
+    app.selected = { side: uu.side, ctl };
+    app.cur = uu.side;
+    changed();
+  }));
   return svg;
 }
 
@@ -90,18 +158,26 @@ function colorSelect(value: number, onChange: (v: number) => void) {
   return sel;
 }
 
-function editor(ctl: number): HTMLElement {
-  const p = editingProfile();
+const channelSelect = (v: number, on: (v: number) => void) => select(Array.from({ length: 16 }, (_, i) => String(i + 1)), v, on);
+
+function controlEditor(u: Unit, ctl: number): HTMLElement {
+  const p = profileOf(u);
   const x = p.ctl[ctl];
-  const edit = (fn: () => void) => { fn(); profileEdited(); };
-  const knob = isKnob(ctl), pad = ctl < PADS;
-  const types = knob ? ['OFF', 'CC'] : [...MSG_TYPES];
+  const edit = (fn: () => void) => { fn(); profileEdited(u); };
+  const knob = isKnob(ctl), pad = isPad(ctl), button = isButton(ctl);
+  const types = knob ? ['OFF', 'CC'] : button ? [...MSG_TYPES, 'ACTION'] : [...MSG_TYPES];
   const typeIndex = knob ? (x.type ? 1 : 0) : x.type;
   const kids: (Node | null)[] = [
-    field('MESSAGE', segmented(types, typeIndex, (v) => edit(() => { x.type = knob ? (v ? 2 : 0) : v; }))),
+    field('MESSAGE', segmented(types, typeIndex, (v) => edit(() => {
+      x.type = knob ? (v ? 2 : 0) : v;
+      if (x.type === MSG_ACTION) { x.number = 0; x.a = 0; }
+    }))),
   ];
-  if (x.type) {
-    kids.push(field('CHANNEL', select(Array.from({ length: 16 }, (_, i) => String(i + 1)), x.channel, (v) => edit(() => { x.channel = v; }))));
+  if (x.type === MSG_ACTION) {
+    kids.push(field('ACTION', select(ACTIONS, x.number, (v) => edit(() => { x.number = v; }))));
+    if (x.number === 0) kids.push(field('LAYER', select(['1', '2', '3', '4'], x.a, (v) => edit(() => { x.a = v; })), 'switches the pads to this layer'));
+  } else if (x.type) {
+    kids.push(field('CHANNEL', channelSelect(x.channel, (v) => edit(() => { x.channel = v; }))));
     kids.push(field(x.type === 1 ? 'NOTE' : x.type === 2 ? 'CC NUMBER' : 'PROGRAM', num(x.number, 0, 127, (v) => edit(() => { x.number = v; })),
       x.type === 1 ? noteName(x.number) : undefined));
     if (knob) {
@@ -114,63 +190,119 @@ function editor(ctl: number): HTMLElement {
     }
   }
   if (pad) {
+    const L = Math.floor(ctl / PADS);
     kids.push(field('IDLE COLOR', colorSelect(x.a, (v) => edit(() => { x.a = v; }))));
     kids.push(field('PRESSED COLOR', colorSelect(x.b, (v) => edit(() => { x.b = v; }))));
     kids.push(field('HOST COLOR', colorSelect(x.c, (v) => edit(() => { x.c = v; })), 'when the app lights it'));
     kids.push(h('div', { class: 'row' },
       h('button', {
         onclick: () => edit(() => {
-          for (let q = 0; q < PADS; q++) Object.assign(p.ctl[q], { type: x.type, channel: x.channel, mode: x.mode, a: x.a, b: x.b, c: x.c });
+          for (let q = 0; q < PADS; q++) Object.assign(p.ctl[L * PADS + q], { type: x.type, channel: x.channel, mode: x.mode, a: x.a, b: x.b, c: x.c });
         }),
-      }, 'APPLY TO ALL PADS'),
+      }, 'APPLY TO LAYER'),
       h('button', {
         onclick: () => edit(() => {
           // numbers upwards from this pad's: bottom row first, left to right, as the unit sits
-          const sd = side();
           let n = x.number;
-          for (let row = 3; row >= 0; row--) for (let col = 0; col < 4; col++) {
-            const q = padAt(sd, row, col);
-            p.ctl[q].number = Math.min(127, n++);
-          }
+          for (let row = 3; row >= 0; row--) for (let col = 0; col < 4; col++) p.ctl[L * PADS + padAt(u.side, row, col)].number = Math.min(127, n++);
         }),
       }, 'NUMBER PADS FROM HERE'),
     ));
   }
-  return h('div', { class: 'editor' }, h('div', { class: 'title' }, controlName(ctl)), ...kids);
+  return h('div', { class: 'editor' }, h('div', { class: 'title' }, controlName(u, ctl)), ...kids);
+}
+
+function layerEditor(u: Unit): HTMLElement {
+  const p = profileOf(u);
+  const L = u.layer;
+  const l = p.layer[L];
+  const edit = (fn: () => void) => { fn(); profileEdited(u); };
+  const pickers = p.ctl.slice(CTL_BUTTON0, CTL_KNOB0).map((x, b) => (x.type === MSG_ACTION && x.number === 0 && x.a === L ? BUTTON_NAMES[b] : '')).filter(Boolean);
+  const kids: (Node | null)[] = [
+    field('TYPE', segmented(LAYER_TYPES, l.type, (v) => edit(() => {
+      if (L === 0 && v === LAYER_OFF) return;   // layer 1 always exists
+      l.type = v;
+    })), L === 0 ? 'layer 1 is always there' : pickers.length ? `picked by ${pickers.join(', ')}` : 'set a button to ACTION → LAYER to pick it'),
+    field('START LAYER', h('input', { type: 'checkbox', checked: p.startLayer === L, onchange: () => edit(() => { p.startLayer = L; }) }), 'after power-up and profile change'),
+  ];
+  if (l.type === LAYER_KEYS) {
+    const k = p.keys;
+    kids.push(
+      field('CHANNEL', channelSelect(l.channel, (v) => edit(() => { l.channel = v; })), 'JAMbo: MIDI → NOTES'),
+      field('LAYOUT', segmented(KEYS_LAYOUTS, l.layout, (v) => edit(() => { l.layout = v; l.rowStep = v ? 3 : 4; })),
+        l.layout ? 'only the notes of the scale' : 'all notes, the scale lit (as MPC)'),
+      field('ROW STEP', num(l.rowStep, 1, 12, (v) => edit(() => { l.rowStep = v; })), l.layout ? 'scale degrees per row' : 'semitones per row (4 = MPC, 5 = fourths)'),
+      field('ROOT COLOR', colorSelect(l.rootColor, (v) => edit(() => { l.rootColor = v; }))),
+      field('SCALE COLOR', colorSelect(l.scaleColor, (v) => edit(() => { l.scaleColor = v; }))),
+      field('OUT OF SCALE', colorSelect(l.outColor, (v) => edit(() => { l.outColor = v; }))),
+      field('PRESSED COLOR', colorSelect(l.pressedColor, (v) => edit(() => { l.pressedColor = v; }))),
+      h('div', { class: 'title' }, 'SCALE'),
+      field('FOLLOW JAMbo', segmented(['OFF', 'ON'], k.followHost, (v) => edit(() => { k.followHost = v; })), 'the app sends its SCALE, ROOT and octave'),
+      field('ROOT', select(NOTE_NAMES, k.root, (v) => edit(() => { k.root = v; }))),
+      field('SCALE', select(SCALES.map((x) => x.name), k.scale, (v) => edit(() => { k.scale = v; }))),
+      field('OCTAVE', num(k.octave, 0, 7, (v) => edit(() => { k.octave = v; })), `lowest note ${noteName(12 * (k.octave + 1) + k.root)}`),
+      u.dev ? h('button', { onclick: () => u.dev!.setScale(k.root, SCALES[k.scale].mask, k.octave) }, 'SEND THIS SCALE TO THE PAD') : null,
+    );
+  }
+  return h('div', { class: 'editor' }, h('div', { class: 'title' }, `${u.side === Side.LEFT ? 'LEFT' : 'RIGHT'} · LAYER ${L + 1}`), ...kids);
+}
+
+function layerTabs(u: Unit): HTMLElement {
+  const p = profileOf(u);
+  return h('div', { class: 'layer-tabs' },
+    h('span', { class: 'label' }, u.side === Side.LEFT ? 'LEFT' : 'RIGHT'),
+    ...Array.from({ length: LAYERS }, (_, L) => {
+      const t = p.layer[L].type;
+      return h('button', {
+        class: (u.layer === L ? 'on' : '') + (t === LAYER_OFF ? ' off' : ''),
+        onclick: () => {
+          u.layer = L;
+          app.cur = u.side;
+          if (app.selected && app.selected.side === u.side && isPad(app.selected.ctl)) app.selected = null;
+          if (u.dev && t !== LAYER_OFF) u.dev.setLayer(L).catch(() => undefined);
+          changed();
+        },
+      }, `${L + 1} ${t === LAYER_KEYS ? 'KEYS' : t === LAYER_OFF ? '–' : ''}`.trim());
+    }));
 }
 
 export function layoutPage(): HTMLElement {
-  const p = editingProfile();
-  const unitBox = h('div', { class: 'unit-box' });
-  const redraw = () => {
-    unitBox.replaceChildren(drawUnit((c, e) => {
-      if (app.sim && e.shiftKey) app.sim.hit(c, 0.7);
-      app.selected = c;
-      changed();
-    }));
-  };
-  redraw();
+  const units = shownUnits();
+  const sel = app.selected;
+  const selUnit = sel ? app.units[sel.side] : null;
+  const showLayer = sel && selUnit && isPad(sel.ctl) && profileOf(selUnit).layer[selUnit.layer].type === LAYER_KEYS;
+  const cur = app.units[app.cur];
+  const anyDev = app.units.some((u) => u.dev);
 
   const tools = h('div', { class: 'row' },
-    app.dev ? h('button', {
-      class: app.identify ? 'on' : '',
+    field('SHOW', segmented(['BOTH', 'LEFT', 'RIGHT'], app.view, (v) => { app.view = v; changed(); })),
+    anyDev ? h('button', {
+      class: app.units.some((u) => u.identify) ? 'on' : '',
       onclick: () => run('identify', async () => {
-        app.identify = !app.identify;
-        await app.dev!.identify(app.identify);
+        const on = !app.units.some((u) => u.identify);
+        for (const u of app.units) if (u.dev) { u.identify = on; await u.dev.identify(on); }
       }),
     }, 'IDENTIFY') : null,
-    field('LED MODE', segmented(LED_MODES, p.ledMode, (v) => { p.ledMode = v; profileEdited(); })),
   );
-  const help = app.identify
-    ? h('p', { class: 'hint' }, 'IDENTIFY: touch a control on the device — it lights up here. Check that the drawing matches the device.')
-    : h('p', { class: 'hint' }, 'Tap a control to edit it. Changes go to the device at once; SAVE writes them to its memory.');
+  const help = app.units.some((u) => u.identify)
+    ? h('p', { class: 'hint' }, 'IDENTIFY: touch a control on a pad — it lights up here. Check that the drawing matches the device.')
+    : h('p', { class: 'hint' }, 'Tap a control to edit it. Changes go to the pads at once; SAVE writes them to their memory.');
 
-  const simRow = app.sim ? h('div', { class: 'row' },
-    h('span', { class: 'hint' }, 'Virtual device:'),
-    h('button', { onclick: () => { if (app.selected !== null && app.selected < PADS) app.sim!.hit(app.selected, Math.random()); } }, 'HIT SELECTED PAD'),
-    h('button', { onclick: () => { if (app.selected !== null && isKnob(app.selected)) app.sim!.knob(app.selected - PADS - BUTTONS, 1); } }, 'TURN SELECTED KNOB'),
+  const sim = selUnit?.sim;
+  const simRow = sim && sel ? h('div', { class: 'row' },
+    h('span', { class: 'hint' }, 'Virtual pad:'),
+    isPad(sel.ctl) ? h('button', { onclick: () => sim.hit(sel.ctl % PADS, Math.random()) }, 'HIT') : null,
+    isKnob(sel.ctl) ? h('button', { onclick: () => sim.knob(sel.ctl - CTL_KNOB0, 1) }, 'TURN') : null,
+    isButton(sel.ctl) ? h('button', { onclick: () => sim.button(sel.ctl - CTL_BUTTON0) }, 'PRESS') : null,
   ) : null;
 
-  return h('div', { class: 'page layout' }, tools, help, unitBox, simRow, app.selected !== null ? editor(app.selected) : null);
+  return h('div', { class: 'page layout' },
+    tools, help,
+    h('div', { class: 'row layers' }, ...units.map(layerTabs)),
+    h('div', { class: 'unit-box' }, drawing()),
+    simRow,
+    sel && selUnit && !showLayer ? controlEditor(selUnit, sel.ctl) : null,
+    layerEditor(selUnit ?? cur),
+    field(`LED MODE · ${cur.side === Side.LEFT ? 'LEFT' : 'RIGHT'}`, segmented(LED_MODES, profileOf(cur).ledMode, (v) => { profileOf(cur).ledMode = v; profileEdited(cur); })),
+  );
 }
-
