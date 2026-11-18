@@ -162,7 +162,7 @@ export function devicePage(): HTMLElement {
           ),
           h('p', { class: 'hint' }, 'A connected pad: UPDATE FIRMWARE in its card. A pad that does not start: hold SHIFT + PLAY while switching it on (bootloader), then WRITE FIRMWARE.'),
           ui.fwInfo ? h('p', {}, ui.fwInfo) : null),
-    installSection(),
+    installSection(() => run('update', async () => toBootloader(null, await bundledFirmware()))),
   );
 
   return h('div', { class: 'page' }, support(), connection, unitCard(app.units[Side.LEFT]), unitCard(app.units[Side.RIGHT]), fw);

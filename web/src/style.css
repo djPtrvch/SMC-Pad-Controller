@@ -88,3 +88,4 @@ svg .on-pad.ink-dark { fill: #000; }
 .unit-switch { margin-bottom: 4px; }
 input[type=checkbox] { width: 28px; height: 28px; min-height: 0; accent-color: var(--accent); }
 @media (max-width: 700px) { .row.layers { flex-direction: column; gap: 6px; } }
+pre.log { white-space: pre-wrap; font-size: 12px; background: var(--panel2); padding: 10px; border-radius: 8px; margin: 0; }

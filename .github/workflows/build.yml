@@ -42,8 +42,48 @@ jobs:
           name: firmware
           path: dist/jambopad.bin
 
+  # the open-smc-pad bootloader and the first-install images (tools/make_install.py)
+  install-images:
+    runs-on: ubuntu-latest
+    env:
+      OSP_TAG: v0.1.1
+      TOOLCHAIN_URL: https://jl-update.oss-cn-shenzhen.aliyuncs.com/jieli-linux-toolchains-20260730.1.tar.xz
+      TOOLCHAIN_SHA256: a1545cddbc451a06bac43eb5cd96d831470c42a97c5c0b1f98879a20fc7647bd
+      # sdk/fw-AC63_BT_SDK at open-smc-pad v0.1.1: only cfg_tool.bin is needed
+      CFG_TOOL_URL: https://raw.githubusercontent.com/Jieli-Tech/fw-AC63_BT_SDK/fdc018de81629e21e594d677cf05f87d288be0f0/cpu/br25/tools/cfg_tool.bin
+    steps:
+      - uses: actions/checkout@v4
+      - name: open-smc-pad sources
+        run: |
+          git clone --depth 1 --branch "$OSP_TAG" https://github.com/fedepaj/open-smc-pad osp
+          git -C osp submodule update --init --depth 1 third_party/tinyusb || git -C osp submodule update --init third_party/tinyusb
+          mkdir -p osp/sdk/fw-AC63_BT_SDK/cpu/br25/tools
+          curl -sfL -o osp/sdk/fw-AC63_BT_SDK/cpu/br25/tools/cfg_tool.bin "$CFG_TOOL_URL"
+      - name: JieLi toolchain (from JieLi, checked)
+        run: |
+          mkdir -p osp/tools/jl-toolchain
+          curl -sfL -o tc.tar.xz "$TOOLCHAIN_URL" && echo "$TOOLCHAIN_SHA256  tc.tar.xz" | sha256sum -c
+          tar -xJf tc.tar.xz -C osp/tools/jl-toolchain
+          ls osp/tools/jl-toolchain
+      - name: Build the bootloader and the installer (fw/boot)
+        run: |
+          docker build -t jl-build -f osp/docker/Dockerfile.jl-build osp/docker
+          osp/fw/boot/build.sh
+      - name: Package
+        run: |
+          cd osp
+          python3 host/jlimage.py build --app fw/boot/out/boot.bin --area-base 0x1000 \
+            --vm-base 0x71000 --vm-size 0x4000 --prct-size 0x71000 --out work/flash/boot_area.bin
+          cd ..
+          python3 tools/make_install.py osp dist/install
+          ls -la dist/install
+      - uses: actions/upload-artifact@v4
+        with:
+          name: install
+          path: dist/install
+
   web:
-    needs: firmware
+    needs: [firmware, install-images]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,6 +94,10 @@ jobs:
         with:
           name: firmware
           path: web/public/firmware
+      - uses: actions/download-artifact@v4
+        with:
+          name: install
+          path: web/public/install
       - name: Test and build
         working-directory: web
         run: |
