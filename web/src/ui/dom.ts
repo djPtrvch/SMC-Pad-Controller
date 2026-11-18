@@ -66,16 +66,21 @@ export function toggle(label: string, on: boolean, onChange: (v: boolean) => voi
     h('span', { class: 'switch' + (on ? ' on' : '') }, h('span', { class: 'knob' })));
 }
 
-// text that does not fit its button gets smaller (down to 10 px), then wraps
+// text that does not fit its button: several words go onto two lines; one word gets smaller
 export function fitText(root: HTMLElement) {
   root.querySelectorAll<HTMLElement>('button, .badge').forEach((el) => {
     el.style.fontSize = '';
     el.style.whiteSpace = '';
+    el.style.lineHeight = '';
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+    if (/\s/.test((el.textContent ?? '').trim())) {
+      el.style.whiteSpace = 'normal';
+      el.style.lineHeight = '1.15';
+    }
     let size = parseFloat(getComputedStyle(el).fontSize);
-    while (el.scrollWidth > el.clientWidth + 1 && size > 10) {
-      size -= 1;
+    while (el.scrollWidth > el.clientWidth + 1 && size > 8) {
+      size -= 0.5;
       el.style.fontSize = `${size}px`;
     }
-    if (el.scrollWidth > el.clientWidth + 1) el.style.whiteSpace = 'normal';
   });
 }

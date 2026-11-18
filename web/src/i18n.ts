@@ -21,7 +21,7 @@ export function setLang(l: Lang) {
 
 const RU: Record<string, string> = {
   // tabs, header
-  DEVICE: 'УСТРОЙСТВО', LAYOUT: 'РАСКЛАДКА', SENSITIVITY: 'СИЛА УДАРА', PROFILES: 'ПРОФИЛИ',
+  DEVICE: 'УСТРОЙСТВО', LAYOUT: 'РАСКЛАДКА', VELOCITY: 'ЧУВСТВИТЕЛЬНОСТЬ', PROFILES: 'ПРОФИЛИ',
   SAVE: 'СОХРАНИТЬ', SAVED: 'СОХРАНЕНО', 'not connected': 'не подключено', offline: 'не подключён',
   // device page
   CONNECT: 'ПОДКЛЮЧЕНИЕ', 'FIND PADS': 'НАЙТИ ПЭДЫ', BLUETOOTH: 'BLUETOOTH', 'VIRTUAL PADS': 'ВИРТУАЛЬНЫЕ ПЭДЫ',
@@ -64,7 +64,7 @@ const RU: Record<string, string> = {
     'ОПОЗНАТЬ: нажмите элемент на пэде — он подсветится здесь. Проверьте, что схема совпадает с устройством.',
   IDENTIFY: 'ОПОЗНАТЬ', 'Virtual pad:': 'Виртуальный пэд:', HIT: 'УДАР', TURN: 'ПОВОРОТ', PRESS: 'НАЖАТЬ',
   MESSAGE: 'СООБЩЕНИЕ', NOTE: 'НОТА', ACTION: 'ДЕЙСТВИЕ', CHANNEL: 'КАНАЛ', 'CC NUMBER': 'НОМЕР CC', PROGRAM: 'ПРОГРАММА',
-  MODE: 'РЕЖИМ', MOMENTARY: 'МОМЕНТАЛЬНЫЙ', TOGGLE: 'ВКЛЮЧЕНИЕ-ВЫКЛЮЧЕНИЕ', 'LEFT CONTROLLER': 'ЛЕВЫЙ КОНТРОЛЛЕР', 'RIGHT CONTROLLER': 'ПРАВЫЙ КОНТРОЛЛЕР', MIN: 'МИН', MAX: 'МАКС', SPEED: 'СКОРОСТЬ',
+  MODE: 'РЕЖИМ', MOMENTARY: 'МОМЕНТАЛЬНЫЙ', TOGGLE: 'ВКЛ-ВЫКЛ', 'LEFT CONTROLLER': 'ЛЕВЫЙ КОНТРОЛЛЕР', 'RIGHT CONTROLLER': 'ПРАВЫЙ КОНТРОЛЛЕР', MIN: 'МИН', MAX: 'МАКС', SPEED: 'СКОРОСТЬ',
   'min > max: inverted': 'мин > макс — наоборот', 'steps per click': 'шагов на щелчок',
   ABSOLUTE: 'АБСОЛЮТНЫЙ', 'REL OFFSET 64': 'ОТНОС. OFFSET 64', "REL 2'S COMPL.": 'ОТНОС. 2’S COMPL.', 'REL SIGNED BIT': 'ОТНОС. SIGNED BIT',
   'IDLE COLOR': 'ЦВЕТ В ПОКОЕ', 'PRESSED COLOR': 'ЦВЕТ ПРИ НАЖАТИИ', 'HOST COLOR': 'ЦВЕТ ОТ ПРИЛОЖЕНИЯ', 'when the app lights it': 'когда его зажигает приложение',

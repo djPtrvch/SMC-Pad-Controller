@@ -7,7 +7,7 @@ import { layoutPage } from './ui/layout';
 import { profilesPage } from './ui/profiles';
 import { enterSensitivity, sensitivityPage } from './ui/sensitivity';
 
-const TABS: [Tab, string][] = [['device', 'DEVICE'], ['layout', 'LAYOUT'], ['sensitivity', 'SENSITIVITY'], ['profiles', 'PROFILES']];
+const TABS: [Tab, string][] = [['device', 'DEVICE'], ['layout', 'LAYOUT'], ['sensitivity', 'VELOCITY'], ['profiles', 'PROFILES']];
 const root = document.getElementById('app')!;
 
 function setTab(t: Tab) {
@@ -50,6 +50,8 @@ function render() {
     ].filter((x): x is HTMLElement => x !== null),
   );
   translateTree(root);
+  // tabs share the width by the length of their (translated) names: one font size for all
+  root.querySelectorAll<HTMLElement>('nav > button').forEach((b) => { b.style.flex = `${(b.textContent ?? '').length + 2} 1 0`; });
   fitText(root);
   window.scrollTo(0, scroll);
 }
