@@ -7,7 +7,7 @@
 
 namespace jp {
 
-static const uint8_t FW_MAJOR = 0, FW_MINOR = 3, FW_PATCH = 0;
+static const uint8_t FW_MAJOR = 0, FW_MINOR = 4, FW_PATCH = 0;
 static const uint8_t FORMAT_VERSION = 2;
 
 static const int PADS = 16, BUTTONS = 10, KNOBS = 8, LAYERS = 4;
@@ -25,7 +25,8 @@ enum Side : uint8_t { SIDE_RIGHT = 0, SIDE_LEFT = 1 };      // LEFT = the unit t
 
 enum MsgType : uint8_t { MSG_OFF = 0, MSG_NOTE = 1, MSG_CC = 2, MSG_PC = 3, MSG_ACTION = 4 };   // ACTION: buttons only
 // number = action, a = layer. ROOT: while held, the 12 lowest pads pick the key note (C..B)
-enum Action : uint8_t { ACT_LAYER = 0, ACT_OCT_UP = 1, ACT_OCT_DOWN = 2, ACT_ROOT = 3, ACT_COUNT };
+// BLUETOOTH: Bluetooth on / off. PROFILE: a = profile (bank) 0..3
+enum Action : uint8_t { ACT_LAYER = 0, ACT_OCT_UP = 1, ACT_OCT_DOWN = 2, ACT_ROOT = 3, ACT_BLUETOOTH = 4, ACT_PROFILE = 5, ACT_COUNT };
 enum ButtonMode : uint8_t { MODE_MOMENTARY = 0, MODE_TOGGLE = 1 };
 enum KnobMode : uint8_t { KNOB_ABS = 0, KNOB_REL64 = 1, KNOB_REL2C = 2, KNOB_RELSIGN = 3 };
 enum Curve : uint8_t {
@@ -93,6 +94,7 @@ struct Device {
     uint8_t active;             // active profile 0..3
     uint8_t thru;               // Thru: what from USB goes to the 3.5 mm MIDI OUT
     uint8_t controlsOut;        // 1: the controls' own messages go to MIDI OUT too
+    uint8_t ble;                // 1: Bluetooth (BLE-MIDI and the settings service) on
 };
 
 // ------------------------------------------------------------------ scales (JAMbo's list)
@@ -102,7 +104,7 @@ int scaleSteps(uint16_t mask, uint8_t steps[12]);   // the mask's semitones, asc
 
 // ------------------------------------------------------------------ byte layout
 static const int PROFILE_BYTES = 743;   // see docs/sysex.md
-static const int DEVICE_BYTES = 5;
+static const int DEVICE_BYTES = 6;
 void serializeProfile(const Profile &p, uint8_t out[PROFILE_BYTES]);
 bool deserializeProfile(const uint8_t in[PROFILE_BYTES], Profile &p);   // false: other version
 void serializeDevice(const Device &d, uint8_t out[DEVICE_BYTES]);

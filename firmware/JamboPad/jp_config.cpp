@@ -125,6 +125,7 @@ void serializeDevice(const Device &d, uint8_t *o) {
     o[2] = d.active;
     o[3] = d.thru;
     o[4] = d.controlsOut;
+    o[5] = d.ble;
 }
 
 bool deserializeDevice(const uint8_t *in, Device &d) {
@@ -133,6 +134,7 @@ bool deserializeDevice(const uint8_t *in, Device &d) {
     d.active = in[2] < PROFILES ? in[2] : 0;
     d.thru = in[3] <= THRU_ALL ? in[3] : (uint8_t)THRU_CLOCK;
     d.controlsOut = in[4] ? 1 : 0;
+    d.ble = in[5] ? 1 : 0;
     return true;
 }
 
@@ -179,7 +181,7 @@ void sanitize(Profile &p) {
             if (x.mode > MODE_TOGGLE) x.mode = MODE_MOMENTARY;
             if (x.type == MSG_ACTION) {
                 if (x.number >= ACT_COUNT) x.number = ACT_LAYER;
-                x.a = x.a < LAYERS ? x.a : 0;
+                x.a = x.a < LAYERS ? x.a : 0;               // LAYERS == PROFILES == 4
             } else {
                 x.a = 0;
             }
@@ -265,6 +267,7 @@ void defaultDevice(Device &d) {
     d.active = 0;
     d.thru = THRU_CLOCK;
     d.controlsOut = 0;
+    d.ble = 1;
 }
 
 static void customLayer(Profile &p, Side side, int L, uint8_t ch, uint8_t idle, uint8_t host) {

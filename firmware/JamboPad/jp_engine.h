@@ -16,6 +16,7 @@ public:
     virtual int storeRead(int key, void *buf, int len) = 0;     // bytes read, <= 0: none
     virtual int storeWrite(int key, const void *buf, int len) = 0;
     virtual void enterBootloader() = 0;                         // does not return on the device
+    virtual void setBluetooth(bool on) = 0;                     // advertise or not (drops a connection)
 };
 
 // SysEx: F0 7D 4A 50 <command> <data...> F7 (docs/sysex.md)
@@ -24,9 +25,9 @@ enum Command : uint8_t {
     CMD_HELLO = 0x01, CMD_GET_PROFILE = 0x02, CMD_SET_PROFILE = 0x03, CMD_SAVE = 0x04,
     CMD_SELECT = 0x05, CMD_SET_SIDE = 0x06, CMD_MONITOR = 0x07, CMD_SET_RGB = 0x08,
     CMD_BOOTLOADER = 0x09, CMD_FACTORY_RESET = 0x0A, CMD_IDENTIFY = 0x0B,
-    CMD_SET_SCALE = 0x0C, CMD_SET_MIDI_OUT = 0x0D, CMD_SET_LAYER = 0x0E,
+    CMD_SET_SCALE = 0x0C, CMD_SET_MIDI_OUT = 0x0D, CMD_SET_LAYER = 0x0E, CMD_SET_BLUETOOTH = 0x0F,
     REPLY = 0x40,                   // a reply is the command | 0x40
-    EV_PRESSURE = 0x60, EV_HIT = 0x61, EV_IDENTIFY = 0x62, EV_PROFILE = 0x63, EV_LAYER = 0x64, EV_ROOT = 0x65,
+    EV_PRESSURE = 0x60, EV_HIT = 0x61, EV_IDENTIFY = 0x62, EV_PROFILE = 0x63, EV_LAYER = 0x64, EV_ROOT = 0x65, EV_BLUETOOTH = 0x66,
 };
 enum Status : uint8_t { ST_OK = 0, ST_BAD_ARGS = 1, ST_STORE_ERROR = 2 };
 
@@ -41,7 +42,9 @@ public:
     void padSample(int pad, uint16_t raw, uint32_t nowMs);      // each new ADC pass
     void buttonEvent(int button, bool down, uint32_t nowMs);
     void knobEvent(int knob, int delta);
-    void midiIn(uint8_t byte);                                  // from USB
+    // inputs, each with its own parser: USB, BLE-MIDI, the Bluetooth settings service
+    enum Port : uint8_t { PORT_USB = 0, PORT_BLE_MIDI = 1, PORT_BLE_CFG = 2, PORTS = 3 };
+    void midiIn(uint8_t byte, Port port = PORT_USB);
     void tick(uint32_t nowMs);                                  // every loop()
 
     // for the tests and the sketch
@@ -100,10 +103,13 @@ private:
     bool ledDirty = true;
     bool profileDirty[PROFILES] = {};
 
-    // MIDI input parser
-    uint8_t runStatus = 0, data[2] = {}, dataCount = 0;
-    uint8_t sysex[SYSEX_MAX];
-    int sysexLen = -1;              // -1: not in a SysEx
+    // MIDI input parsers, one per port
+    struct Parser {
+        uint8_t runStatus = 0, data[2] = {}, dataCount = 0;
+        uint8_t sysex[SYSEX_MAX];
+        int sysexLen = -1;          // -1: not in a SysEx
+    };
+    Parser parser[PORTS];
 
     void applyActive();
     void applyKeys();
@@ -112,6 +118,8 @@ private:
     bool saveDevice();
     bool saveProfile(int i);
     void setLayer(int L);
+    void selectProfile(int i);
+    void setBluetooth(bool on);
 
     void padOn(int pad, uint8_t vel);
     void padOff(int pad);

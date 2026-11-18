@@ -3,15 +3,52 @@
 // Board: "M-Vave SMC-PAD (open firmware)" from open-smc-pad's Boards Manager package.
 #include <SMCPad.h>
 #include <MIDIUSB.h>
+#include <ArduinoBLE.h>
+#include <BLEMIDI.h>
 #include "jp_engine.h"
+
+// Bluetooth: BLE-MIDI (the library, no SysEx yet) and our settings service, which carries the
+// JAMboPAD SysEx (docs/sysex.md) as plain bytes in 20-byte pieces (fits any ATT MTU). The web
+// configurator talks to it over Web Bluetooth.
+static BLEService cfgService("4a50c0f1-0b1e-4d1a-9a7d-7d4a50000001");
+static BLECharacteristic cfgChar("4a50c0f1-0b1e-4d1a-9a7d-7d4a50000002",
+                                 BLEWrite | BLEWriteWithoutResponse | BLENotify, 20);
+static uint8_t cfgRx[1024];
+static volatile uint16_t cfgHead, cfgTail;
+static bool bleStarted, bleWanted;
+
+static void onCfgWrite(BLEDevice, BLECharacteristic c) {
+    const uint8_t *v = c.value();
+    for (int i = 0; i < c.valueLength(); i++) {
+        uint16_t next = (uint16_t)((cfgHead + 1) % sizeof cfgRx);
+        if (next == cfgTail) break;             // full: the rest is dropped (the host retries)
+        cfgRx[cfgHead] = v[i];
+        cfgHead = next;
+    }
+}
 
 class PadHal : public jp::Hal {
 public:
     void midiOut(const uint8_t *m, int n) override {
         if (n <= 0) return;
-        if (m[0] == 0xF0) { sysexOut(m, n); return; }
+        if (m[0] == 0xF0) {
+            sysexOut(m, n);
+            if (bleStarted && cfgChar.subscribed()) cfgOut(m, n);
+            return;
+        }
         uint8_t p[4] = {(uint8_t)(m[0] >> 4), m[0], n > 1 ? m[1] : (uint8_t)0, n > 2 ? m[2] : (uint8_t)0};
         put(p);
+        if (bleStarted && BLEMIDI.connected()) BLEMIDI.send(m[0], n > 1 ? m[1] : 0, n > 2 ? m[2] : 0);
+    }
+    void setBluetooth(bool on) override {
+        bleWanted = on;
+        if (!bleStarted) return;                // setup() applies it once BLE is up
+        if (on) {
+            BLE.advertise();
+        } else {
+            BLE.disconnect();
+            BLE.stopAdvertise();
+        }
     }
     // 3.5 mm MIDI OUT: PC5 (UART1 TX on the board), driven by software at 31250 baud, 8N1.
     // The core has no UART for it yet (open-smc-pad docs/gaps.md); bit timing from the
@@ -35,6 +72,12 @@ public:
     }
 
 private:
+    static void cfgOut(const uint8_t *m, int n) {
+        for (int i = 0; i < n; i += 20) {
+            int k = n - i < 20 ? n - i : 20;
+            for (int tries = 0; tries < 200 && !cfgChar.writeValue(m + i, k, false); tries++) smcpad_yield();
+        }
+    }
     static const uint32_t DIN_PIN = 32 + 5;         // PC5
     static const uint32_t BIT_US = 32;              // 1 / 31250 s
     static void dinByte(uint8_t b) {
@@ -87,7 +130,14 @@ static int packetBytes(uint8_t cin) {
 void setup() {
     SMCPad.begin();
     PadHal::dinBegin();
-    engine.begin(millis());
+    BLE.begin();
+    cfgService.addCharacteristic(cfgChar);
+    cfgChar.setEventHandler(BLEWritten, onCfgWrite);
+    BLE.addService(cfgService);                 // before BLEMIDI.begin(), which starts advertising
+    engine.begin(millis());                     // loads the settings; asks for Bluetooth on or off
+    BLEMIDI.begin(engine.device().side == jp::SIDE_LEFT ? "JAMboPAD L" : "JAMboPAD R");
+    bleStarted = true;
+    hal.setBluetooth(bleWanted);
     lastRound = smcpad_pad_rounds();
 }
 
@@ -119,8 +169,23 @@ void loop() {
         if (n > 2) engine.midiIn(pk.byte3);
     }
 
+    BLE.poll();
+    while (cfgTail != cfgHead) {
+        engine.midiIn(cfgRx[cfgTail], jp::Engine::PORT_BLE_CFG);
+        cfgTail = (uint16_t)((cfgTail + 1) % sizeof cfgRx);
+    }
+    for (int k = 0; k < 32; k++) {
+        midiEventPacket_t pk = BLEMIDI.read();
+        if (pk.header == 0) break;
+        int n = packetBytes(pk.header);
+        if (n > 0) engine.midiIn(pk.byte1, jp::Engine::PORT_BLE_MIDI);
+        if (n > 1) engine.midiIn(pk.byte2, jp::Engine::PORT_BLE_MIDI);
+        if (n > 2) engine.midiIn(pk.byte3, jp::Engine::PORT_BLE_MIDI);
+    }
+
     engine.tick(now);
     MidiUSB.flush();
+    BLEMIDI.flush();
 
     if (!bootConfirmed && now > 3000) {
         bootConfirmed = true;

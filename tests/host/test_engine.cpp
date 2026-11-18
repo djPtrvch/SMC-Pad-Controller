@@ -36,6 +36,8 @@ struct MockHal : Hal {
         return len;
     }
     void enterBootloader() override { boot = true; }
+    int bt = -1;
+    void setBluetooth(bool on) override { bt = on; }
     std::vector<uint8_t> last() { return out.empty() ? std::vector<uint8_t>() : out.back(); }
 };
 
@@ -233,7 +235,7 @@ static void testSysex() {
     hal.out.clear();
     feed(e, sysex(CMD_HELLO, {}));
     auto r = hal.last();
-    CHECK(r.size() == 17 && r[4] == (CMD_HELLO | REPLY) && r[5] == ST_OK && r[12] == PROFILES);
+    CHECK(r.size() == 18 && r[4] == (CMD_HELLO | REPLY) && r[5] == ST_OK && r[12] == PROFILES);
     // get -> set the same -> save -> a new engine on the same store reads it back
     feed(e, sysex(CMD_GET_PROFILE, {2}));
     r = hal.last();
@@ -443,6 +445,56 @@ static void testRootPick() {
     CHECK(hal.out[0][0] == 0x93 && hal.out[0][1] == 12 * 4 + 7);
 }
 
+static void testBluetoothAndProfileButtons() {
+    MockHal hal;
+    Engine e(hal);
+    e.begin(0);
+    CHECK(hal.bt == 1);                                         // on by default
+    Profile p = e.activeProfile();
+    p.ctl[CTL_BUTTON0 + 0] = Control{MSG_ACTION, 0, ACT_BLUETOOTH, 0, 0, 0, 0, 0};
+    p.ctl[CTL_BUTTON0 + 1] = Control{MSG_ACTION, 0, ACT_PROFILE, 0, 2, 0, 0, 0};
+    uint8_t raw[PROFILE_BYTES], packed[1000];
+    serializeProfile(p, raw);
+    size_t n = pack7(raw, PROFILE_BYTES, packed);
+    std::vector<uint8_t> pl = {0};
+    pl.insert(pl.end(), packed, packed + n);
+    feed(e, sysex(CMD_SET_PROFILE, pl));
+    e.tick(0);
+    CHECK(hal.led[0]);                                          // BT on: lit
+    e.buttonEvent(0, true, 0);
+    e.buttonEvent(0, false, 0);
+    CHECK(hal.bt == 0 && e.device().ble == 0);
+    e.tick(0);
+    CHECK(!hal.led[0]);
+    e.buttonEvent(1, true, 0);                                  // profile 3
+    CHECK(e.device().active == 2);
+    feed(e, sysex(CMD_SET_BLUETOOTH, {1}));
+    CHECK(hal.bt == 1);
+    Engine e2(hal);
+    e2.begin(0);
+    CHECK(e2.device().ble == 1 && e2.device().active == 2);
+}
+
+static void testPortsDoNotMix() {
+    MockHal hal;
+    Engine e(hal);
+    e.begin(0);
+    hal.out.clear();
+    // a settings SysEx over Bluetooth, with USB notes arriving in the middle of it
+    auto m = sysex(CMD_HELLO, {});
+    for (size_t i = 0; i < m.size(); i++) {
+        e.midiIn(m[i], Engine::PORT_BLE_CFG);
+        if (i == 2) for (uint8_t b : {0x92, 37, 127}) e.midiIn(b, Engine::PORT_USB);
+    }
+    CHECK(!hal.out.empty() && hal.out.back()[4] == (CMD_HELLO | REPLY));
+    // the settings service does not go to MIDI OUT
+    hal.din.clear();
+    for (uint8_t b : {0xF8, 0xFA}) e.midiIn(b, Engine::PORT_BLE_CFG);
+    CHECK(hal.din.empty());
+    for (uint8_t b : {0xF8}) e.midiIn(b, Engine::PORT_BLE_MIDI);
+    CHECK(hal.din.size() == 1);
+}
+
 static void testFollowHostOff() {
     MockHal hal;
     sideLeft(hal);
@@ -552,6 +604,8 @@ int main(int argc, char **argv) {
     testLayersAndKeys();
     testFollowHostOff();
     testRootPick();
+    testBluetoothAndProfileButtons();
+    testPortsDoNotMix();
     testThru();
     if (argc > 1) writeVectors(argv[1]);
     std::printf(failures ? "%d FAILED\n" : "all tests passed\n", failures);

@@ -15,7 +15,26 @@ void Engine::begin(uint32_t nowMs) {
     for (int p = 0; p < PADS; p++) pressCtl[p] = PRESS_NONE;
     loadAll();
     applyActive();
+    hal.setBluetooth(dev.ble);
     updateLeds();
+}
+
+void Engine::selectProfile(int i) {
+    if (i < 0 || i >= PROFILES || i == dev.active) return;
+    dev.active = (uint8_t)i;
+    applyActive();
+    saveDevice();
+    uint8_t ev[1] = {(uint8_t)i};
+    sendSysex(EV_PROFILE, ev, 1);
+}
+
+void Engine::setBluetooth(bool on) {
+    dev.ble = on ? 1 : 0;
+    saveDevice();
+    hal.setBluetooth(on);
+    ledDirty = true;
+    uint8_t ev[1] = {dev.ble};
+    sendSysex(EV_BLUETOOTH, ev, 1);
 }
 
 void Engine::loadAll() {
@@ -157,13 +176,7 @@ void Engine::padOn(int pad, uint8_t vel) {
     if (menu) {
         menuPad[pad] = true;
         int slot = menuSlot(pad);
-        if (slot >= 0 && slot != dev.active) {
-            dev.active = (uint8_t)slot;
-            applyActive();
-            saveDevice();
-            uint8_t ev[1] = {(uint8_t)slot};
-            sendSysex(EV_PROFILE, ev, 1);
-        }
+        if (slot >= 0) selectProfile(slot);
         return;
     }
     if (rootPick >= 0) {
@@ -254,6 +267,8 @@ void Engine::buttonAction(const Control &x) {
         case ACT_LAYER: setLayer(x.a); break;
         case ACT_OCT_UP: if (keyOctave < 7) { keyOctave++; ledDirty = true; } break;
         case ACT_OCT_DOWN: if (keyOctave > 0) { keyOctave--; ledDirty = true; } break;
+        case ACT_BLUETOOTH: setBluetooth(!dev.ble); break;
+        case ACT_PROFILE: selectProfile(x.a); break;
         default: break;
     }
 }
@@ -366,49 +381,51 @@ void Engine::reply(uint8_t cmd, uint8_t status) {
 
 // ------------------------------------------------------------------ MIDI in (USB)
 
-void Engine::midiIn(uint8_t b) {
+void Engine::midiIn(uint8_t b, Port port) {
+    Parser &q = parser[port];
+    bool thruPort = port != PORT_BLE_CFG;           // the settings service is not MIDI
     if (b >= 0xF8) {                                // real time: clock and transport to MIDI OUT
         bool clock = b == 0xF8 || b == 0xFA || b == 0xFB || b == 0xFC;
-        if ((dev.thru == THRU_CLOCK && clock) || (dev.thru == THRU_ALL && b != 0xFE)) hal.dinOut(&b, 1);
+        if (thruPort && ((dev.thru == THRU_CLOCK && clock) || (dev.thru == THRU_ALL && b != 0xFE))) hal.dinOut(&b, 1);
         return;
     }
     if (b == 0xF0) {
-        sysexLen = 0;
-        sysex[sysexLen++] = b;
-        runStatus = 0;
+        q.sysexLen = 0;
+        q.sysex[q.sysexLen++] = b;
+        q.runStatus = 0;
         return;
     }
     if (b == 0xF7) {
-        if (sysexLen > 0 && sysexLen < SYSEX_MAX) {
-            sysex[sysexLen++] = b;
-            if (sysexLen >= 5 && memcmp(sysex, SYSEX_ID, 4) == 0) handleSysex(sysex, sysexLen);
-            else if (dev.thru == THRU_ALL) hal.dinOut(sysex, sysexLen);
+        if (q.sysexLen > 0 && q.sysexLen < SYSEX_MAX) {
+            q.sysex[q.sysexLen++] = b;
+            if (q.sysexLen >= 5 && memcmp(q.sysex, SYSEX_ID, 4) == 0) handleSysex(q.sysex, q.sysexLen);
+            else if (thruPort && dev.thru == THRU_ALL) hal.dinOut(q.sysex, q.sysexLen);
         }
-        sysexLen = -1;
+        q.sysexLen = -1;
         return;
     }
     if (b & 0x80) {
-        sysexLen = -1;
-        runStatus = b < 0xF0 ? b : 0;
-        dataCount = 0;
+        q.sysexLen = -1;
+        q.runStatus = b < 0xF0 ? b : 0;
+        q.dataCount = 0;
         return;
     }
-    if (sysexLen >= 0) {
-        if (sysexLen < SYSEX_MAX - 1) sysex[sysexLen++] = b;
-        else sysexLen = SYSEX_MAX;                  // too long: dropped at F7
+    if (q.sysexLen >= 0) {
+        if (q.sysexLen < SYSEX_MAX - 1) q.sysex[q.sysexLen++] = b;
+        else q.sysexLen = SYSEX_MAX;                // too long: dropped at F7
         return;
     }
-    if (!runStatus) return;
-    data[dataCount++] = b;
-    uint8_t type = runStatus & 0xF0;
+    if (!q.runStatus) return;
+    q.data[q.dataCount++] = b;
+    uint8_t type = q.runStatus & 0xF0;
     int need = (type == 0xC0 || type == 0xD0) ? 1 : 2;
-    if (dataCount >= need) {
-        if (dev.thru == THRU_ALL) {
-            uint8_t m[3] = {runStatus, data[0], data[1]};
+    if (q.dataCount >= need) {
+        if (thruPort && dev.thru == THRU_ALL) {
+            uint8_t m[3] = {q.runStatus, q.data[0], q.data[1]};
             hal.dinOut(m, need + 1);
         }
-        handleShort(runStatus, data[0], need == 2 ? data[1] : 0);
-        dataCount = 0;
+        handleShort(q.runStatus, q.data[0], need == 2 ? q.data[1] : 0);
+        q.dataCount = 0;
     }
 }
 
@@ -447,9 +464,9 @@ void Engine::handleSysex(const uint8_t *m, int len) {
     int n = len - 6;
     switch (cmd) {
         case CMD_HELLO: {
-            uint8_t r[11] = {ST_OK, FW_MAJOR, FW_MINOR, FW_PATCH, FORMAT_VERSION, dev.side, dev.active, PROFILES,
-                             dev.thru, dev.controlsOut, (uint8_t)curLayer};
-            sendSysex(CMD_HELLO | REPLY, r, 11);
+            uint8_t r[12] = {ST_OK, FW_MAJOR, FW_MINOR, FW_PATCH, FORMAT_VERSION, dev.side, dev.active, PROFILES,
+                             dev.thru, dev.controlsOut, (uint8_t)curLayer, dev.ble};
+            sendSysex(CMD_HELLO | REPLY, r, 12);
             break;
         }
         case CMD_GET_PROFILE: {
@@ -558,6 +575,11 @@ void Engine::handleSysex(const uint8_t *m, int len) {
             reply(cmd, saveDevice() ? ST_OK : ST_STORE_ERROR);
             break;
         }
+        case CMD_SET_BLUETOOTH:
+            if (n < 1) { reply(cmd, ST_BAD_ARGS); break; }
+            reply(cmd, ST_OK);                      // first: switching off drops a Bluetooth connection
+            setBluetooth(pl[0] != 0);
+            break;
         case CMD_SET_LAYER: {
             if (n < 1 || pl[0] >= LAYERS || prof[dev.active].layer[pl[0]].type == LAYER_OFF) { reply(cmd, ST_BAD_ARGS); break; }
             setLayer(pl[0]);
@@ -627,7 +649,14 @@ void Engine::updateLeds() {
         int ctl = CTL_BUTTON0 + b;
         const Control &x = p.ctl[ctl];
         bool on;
-        if (x.type == MSG_ACTION) on = x.number == ACT_LAYER ? x.a == curLayer : btnDown[b];      // ROOT, OCT: while held
+        if (x.type == MSG_ACTION) {
+            switch (x.number) {
+                case ACT_LAYER: on = x.a == curLayer; break;
+                case ACT_PROFILE: on = x.a == dev.active; break;
+                case ACT_BLUETOOTH: on = dev.ble; break;
+                default: on = btnDown[b]; break;    // ROOT, OCTAVE: while held
+            }
+        }
         else if (p.ledMode == LED_HOST) on = hostVal[ctl] > 0;
         else if (p.ledMode == LED_LOCAL) on = btnDown[b] || toggled[ctl];
         else on = btnDown[b] || hostVal[ctl] > 0 || (toggled[ctl] && !hostSeen[ctl]);
