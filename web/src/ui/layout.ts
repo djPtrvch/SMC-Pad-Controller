@@ -1,7 +1,7 @@
 // LAYOUT: both units as they sit side by side (the left one turned by 180°), pad layers,
 // and the editors of a control, a layer and the KEYS scale.
 import {
-  ACTIONS, BUTTONS, BUTTON_COLORS, BUTTON_MODES, BUTTON_NAMES, CTL_BUTTON0, CTL_KNOB0, KEYS_LAYOUTS, KNOB_MODES, LAYERS, LAYER_CUSTOM, LAYER_KEYS, LAYER_OFF,
+  ACTIONS, ACT_ROOT, ACT_SCALE, BUTTONS, BUTTON_COLORS, BUTTON_MODES, BUTTON_NAMES, CTL_BUTTON0, CTL_KNOB0, KEYS_LAYOUTS, KNOB_MODES, LAYERS, LAYER_CUSTOM, LAYER_KEYS, LAYER_OFF,
   LAYER_TYPES, LED_MODES, MSG_ACTION, MSG_TYPES, NOTE_NAMES, PADS, PALETTE_NAMES, Profile, SCALES, Side, cssColor, isButton, isKnob,
   isPad, keysNote, knobPosition, noteName, padAt, padPosition, paletteRgb,
 } from '../protocol';
@@ -74,13 +74,30 @@ function drawUnit(svg: SVGSVGElement, u: Unit, ox: number, onTap: (u: Unit, ctl:
     void r;
   };
   const ks = keysState(p);
+  // a KEY NOTE or SCALE button selected: the pads as they look while it is held
+  const selX = app.selected && app.selected.side === u.side && isButton(app.selected.ctl) ? p.ctl[app.selected.ctl] : null;
+  const pick = selX && selX.type === MSG_ACTION && (selX.number === ACT_ROOT || selX.number === ACT_SCALE) ? selX.number : -1;
   for (let pad = 0; pad < PADS; pad++) {
     const r = rectOf(u.side, 'pad', pad);
     const ctl = L * PADS + pad;
     mk(ctl, r, (g, flash) => {
       // a pad as its LED shows it: dark when off, its colour (brightness = level) when lit
       let color = 0, level = 0, t1 = '', t2 = '';
-      if (layer.type === LAYER_KEYS) {
+      const [pr, pc] = padPosition(u.side, pad);
+      const slot = (3 - pr) * 4 + pc;                  // from the bottom-left, as the unit sits
+      if (pick === ACT_ROOT) {
+        if (slot < 12) {
+          const cur = slot === ks.root;
+          color = cur ? 5 : 1; level = cur ? 127 : 20;
+          t1 = NOTE_NAMES[slot]; t2 = cur ? 'key note' : '';
+        }
+      } else if (pick === ACT_SCALE) {
+        if (slot < SCALES.length) {
+          const cur = SCALES[slot].mask === ks.mask;
+          color = cur ? 5 : 9; level = cur ? 127 : 24;
+          t1 = SCALES[slot].short; t2 = cur ? 'current' : '';
+        }
+      } else if (layer.type === LAYER_KEYS) {
         const [row, col] = padPosition(u.side, pad);
         const { note, kind } = keysNote(layer, ks.root, ks.mask, ks.octave, row, col);
         if (note >= 0) {
@@ -104,7 +121,7 @@ function drawUnit(svg: SVGSVGElement, u: Unit, ox: number, onTap: (u: Unit, ctl:
       const ink = lum > 140 ? ' ink-dark' : '';
       g.append(s('text', { x: r.x + r.w / 2, y: r.y + r.h / 2 - 4, class: 't1 on-pad' + ink }, t1));
       g.append(s('text', { x: r.x + r.w / 2, y: r.y + r.h / 2 + 18, class: 't2 on-pad' + ink }, t2));
-      if (layer.type !== LAYER_KEYS && p.ctl[ctl].type) {
+      if (pick < 0 && layer.type !== LAYER_KEYS && p.ctl[ctl].type) {
         g.append(s('rect', { x: r.x + 8, y: r.y + r.h - 14, width: 22, height: 6, rx: 3, fill: cssColor(paletteRgb(p.ctl[ctl].c, 127)) }));
       }
     });
@@ -328,10 +345,18 @@ function bankLine(u: Unit): HTMLElement {
   const L = u.layer;
   const t = p.layer[L].type;
   const by = bankButtons(p, L).map((b) => BUTTON_NAMES[b]).join(', ');
+  // which button, then what it opens (or what the pads show while a KEY NOTE / SCALE button is selected)
+  const sel = app.selected && app.selected.side === u.side && isButton(app.selected.ctl) ? app.selected.ctl : -1;
+  const sx = sel >= 0 ? p.ctl[sel] : null;
+  const pickName = sx && sx.type === MSG_ACTION && (sx.number === ACT_ROOT || sx.number === ACT_SCALE)
+    ? (sx.number === ACT_ROOT ? 'KEY NOTE (HOLD)' : 'SCALE (HOLD)') : '';
+  const what = pickName || `BANK ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`;
+  const who = pickName ? `BUTTON ${BUTTON_NAMES[sel - CTL_BUTTON0]}` : by ? `BUTTON ${by}` : L === p.startLayer ? 'START BANK' : 'NO BUTTON';
   return h('div', { class: 'bank-line' },
     h('span', { class: 'unit-name' }, u.side === Side.LEFT ? 'LEFT' : 'RIGHT', u.dev ? null : h('span', { class: 'hint' }, 'offline')),
-    h('span', { class: 'bank-now' }, `BANK ${L + 1}${t === LAYER_KEYS ? ' KEYS' : ''}`),
-    h('span', { class: 'hint' }, by ? `button ${by}` : L === p.startLayer ? 'start bank' : 'no button'));
+    h('span', { class: 'bank-who' }, who),
+    h('span', { class: 'bank-arrow' }, '→'),
+    h('span', { class: 'bank-now' }, what));
 }
 
 export function layoutPage(): HTMLElement {

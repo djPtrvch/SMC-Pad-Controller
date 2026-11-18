@@ -15,7 +15,7 @@ export const enum Side { RIGHT = 0, LEFT = 1 }
 export const MSG_TYPES = ['OFF', 'NOTE', 'CC', 'PC'] as const;
 export const MSG_ACTION = 4;
 export const ACTIONS = ['PAD BANK', 'OCTAVE UP', 'OCTAVE DOWN', 'KEY NOTE (HOLD)', 'BLUETOOTH', 'PROFILE (ALL SETTINGS)', 'SCALE (HOLD)'] as const;
-export const ACT_LAYER = 0, ACT_ROOT = 3, ACT_BLUETOOTH = 4, ACT_PROFILE = 5;
+export const ACT_LAYER = 0, ACT_ROOT = 3, ACT_BLUETOOTH = 4, ACT_PROFILE = 5, ACT_SCALE = 6;
 export const LAYER_TYPES = ['OFF', 'CUSTOM', 'KEYS'] as const;   // a layer is a pad bank in the interface
 export const LAYER_OFF = 0, LAYER_CUSTOM = 1, LAYER_KEYS = 2;
 export const KEYS_LAYOUTS = ['CHROMATIC', 'IN KEY'] as const;

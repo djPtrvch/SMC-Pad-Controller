@@ -115,3 +115,5 @@ svg .small { font-size: 11px; }
 .bank-line .unit-name { flex-direction: row; gap: 6px; align-items: baseline; }
 .bank-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .bank-now { font-size: 13px; font-weight: 800; letter-spacing: .06em; color: var(--accent); }
+.bank-who { font-size: 13px; font-weight: 800; letter-spacing: .06em; }
+.bank-arrow { color: var(--dim); }
